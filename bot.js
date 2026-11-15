@@ -16,7 +16,14 @@ process.on("uncaughtException", (error) => {
 const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ status: "online", service: "ATX Discord Bot" }));
+  res.end(
+    JSON.stringify({
+      status: "online",
+      service: "ATX Discord Bot",
+      platoBot: "Starza by arez",
+      website: "https://atx-family.onrender.com",
+    }),
+  );
 });
 server.listen(PORT, () => {
   console.log(`[HTTP KEEP-ALIVE] Listening on port ${PORT}`);
