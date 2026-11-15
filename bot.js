@@ -1,5 +1,7 @@
 // bot.js
 require("dotenv").config();
+const http = require("http");
+
 process.on("unhandledRejection", (reason, promise) => {
   console.error("[Process Guard] Unhandled Rejection:", reason);
 });
@@ -7,6 +9,19 @@ process.on("unhandledRejection", (reason, promise) => {
 process.on("uncaughtException", (error) => {
   console.error("[Process Guard] Uncaught Exception:", error);
 });
+
+// ==========================================
+// RENDER KEEP-ALIVE HTTP SERVER
+// ==========================================
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ status: "online", service: "ATX Discord Bot" }));
+});
+server.listen(PORT, () => {
+  console.log(`[HTTP KEEP-ALIVE] Listening on port ${PORT}`);
+});
+
 const mongoose = require("mongoose");
 const {
   Client,
@@ -26,8 +41,9 @@ const DiscordUser = require("./models/DiscordUser");
 const DiscordActivity = require("./models/DiscordActivity");
 
 // 1. Database Connection
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(mongoUri)
   .then(() => console.log("[DATABASE] Connected to DB"))
   .catch((err) => console.error("[DATABASE ERROR]", err));
 
@@ -205,60 +221,9 @@ async function callAiWithFallback(
 // ==========================================
 // GAME ENGINE
 // ==========================================
-const FALLBACK_GAMES = {
-  unscramble: [
-    "VICTORY",
-    "PLATO",
-    "AUCTION",
-    "COMMANDER",
-    "BOUNTY",
-    "CHAMPION",
-    "GLADIATOR",
-    "STRIKER",
-    "WARRIOR",
-    "FORTUNE",
-    "JACKPOT",
-    "ARENA",
-  ],
-  emojigame: [
-    { emojis: "🎱 🟩 ⚪", game: "Pool" },
-    { emojis: "🐺 🌕 ⛺", game: "Werewolf" },
-    { emojis: "🃏 🔴 🔵", game: "Ocho" },
-    { emojis: "⚽ 🥅 👟", game: "Soccer" },
-    { emojis: "🏹 🎯 🌲", game: "Archery" },
-    { emojis: "🤴🏻 ♟️ 🏁", game: "Chess" },
-  ],
-  fasttype: [
-    "strike hard before the timer ends",
-    "atx plato family champions",
-    "weekly auction is now live",
-    "checkmate victory royale",
-    "claim the ep balance and win",
-  ],
-  quiz: [
-    {
-      question: "In which Plato game do you use monsters?",
-      answer: "Match Monsters",
-    },
-    {
-      question: "In which Plato game do you match colored and numbered cards?",
-      answer: "Ocho",
-    },
-    {
-      question: "What is the main bidding currency on the ATX platform?",
-      answer: "EP",
-    },
-    {
-      question: "Which Plato game lets you shoot arrows at targets?",
-      answer: "Archery",
-    },
-  ],
-};
-
 async function generateAiGameData(type) {
   try {
     if (type === "unscramble") {
-      // 1. Dynamic topic rotation to force AI variety
       const topics = [
         "technology",
         "internet",
@@ -283,10 +248,9 @@ async function generateAiGameData(type) {
 
       let word = null;
       const res = await callAiWithFallback(
-        `Generate ONE random, common, recognizable single English word between 6 and 8 letters related to: ${selectedTopic} and related field try going deep in the field, you can use some most common english words used in professional world of technology, space, games and current affairs.
+        `Generate ONE random, common, recognizable single English word between 6 and 8 letters related to: ${selectedTopic}.
 Rules:
 - Strictly letters only (A-Z). No spaces, hyphens, or proper names of people.
-- Choose a creative, non-obvious word (do NOT choose VICTORY, GAMING, or BATTLE).
 - Return strictly valid JSON: {"word": "EXAMPLE"}. No extra text or markdown.`,
       );
 
@@ -303,7 +267,6 @@ Rules:
         } catch (e) {}
       }
 
-      // 2. Comprehensive offline fallback pool (No repeat bias)
       if (!word) {
         const fallbackPool = [
           "CYBER",
@@ -334,7 +297,6 @@ Rules:
         word = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
       }
 
-      // 3. Fisher-Yates shuffle to ensure thoroughly scrambled letters
       const shuffle = (str) => {
         const arr = str.split("");
         for (let i = arr.length - 1; i > 0; i--) {
@@ -373,7 +335,6 @@ Rules:
     }
 
     if (type === "emojigame") {
-      // 1. Broad domain pool with rotating candidate seeds to prevent repetition
       const domainPools = [
         {
           category: "Movie / Franchise",
@@ -437,7 +398,6 @@ Rules:
 
       const domain =
         domainPools[Math.floor(Math.random() * domainPools.length)];
-      // Pick 3 random subjects from the domain for the AI to choose from
       const candidateChoices = domain.seeds
         .sort(() => 0.5 - Math.random())
         .slice(0, 3);
@@ -448,8 +408,6 @@ Rules:
 Create a clear, universally recognized "Guess the ${domain.category}" emoji riddle for it.
 Strict Rules:
 - Provide exactly 3 or 4 emojis that literally and unmistakably represent the chosen subject.
-- Do NOT use random unrelated emojis (e.g. guitar or lightning for Einstein is forbidden).
-- The emojis MUST make obvious sense (e.g. Albert Einstein: 🧠👴💡, Titanic: 🚢🧊🌊, Minecraft: ⛏️🧱🧟, Spider-Man: 🕷️🕸️🏙️).
 - Return strictly valid JSON: {"emojis": "EMOJIS", "answer": "Exact Name", "category": "${domain.category}"}. No extra text or markdown.`,
       );
 
@@ -466,7 +424,6 @@ Strict Rules:
         } catch (e) {}
       }
 
-      // 2. Verified, accurate offline fallback bank
       if (!puzzle) {
         const fallbacks = [
           {
@@ -509,46 +466,6 @@ Strict Rules:
             answer: "Harry Potter",
             category: "Superhero / Character",
           },
-          {
-            emojis: "👨‍🚀🌕🚀",
-            answer: "Neil Armstrong",
-            category: "Iconic Personality",
-          },
-          {
-            emojis: "🎤🧤🕺",
-            answer: "Michael Jackson",
-            category: "Iconic Personality",
-          },
-          {
-            emojis: "⚽🐐🇵🇹",
-            answer: "Cristiano Ronaldo",
-            category: "Iconic Personality",
-          },
-          {
-            emojis: "⚽🐐🇦🇷",
-            answer: "Lionel Messi",
-            category: "Iconic Personality",
-          },
-          {
-            emojis: "☠️⚔️🚢",
-            answer: "Pirates of the Caribbean",
-            category: "Movie / Franchise",
-          },
-          {
-            emojis: "🗡️🧝💍",
-            answer: "Lord of the Rings",
-            category: "Movie / Franchise",
-          },
-          {
-            emojis: "🔪🧑‍🚀🚀",
-            answer: "Among Us",
-            category: "Popular Video Game",
-          },
-          {
-            emojis: "🏎️💨💰",
-            answer: "Grand Theft Auto",
-            category: "Popular Video Game",
-          },
         ];
         puzzle = fallbacks[Math.floor(Math.random() * fallbacks.length)];
       }
@@ -570,28 +487,17 @@ Strict Rules:
               `-# \`/stopgame\` or \`!stopgame\` to cancel.`,
             ].join("\n"),
           )
-          .setFooter({
-            text: `Guess It • ATX`,
-          }),
+          .setFooter({ text: `Guess It • ATX` }),
       };
     }
 
     if (type === "fasttype") {
-      // 1. Rotating themes to prevent repetitive catchphrases
       const themes = [
         "famous dialogue",
-        "famous bollywood dialogue",
-        "funny healthy meme",
-        "internet slang meme",
-        "famous hollywood dialogue",
-        "quick tongue twisters",
-        "keyboard warrior meme",
-        "famous character dialogue",
-        "famous action movies",
-        "famous entity dialogue",
-        "space missions convo",
-        "boss fights dialogue",
-        "famous anime dialogue",
+        "gaming victory slogans",
+        "internet memes",
+        "speed typing challenges",
+        "action quotes",
       ];
       const selectedTheme = themes[Math.floor(Math.random() * themes.length)];
 
@@ -599,7 +505,7 @@ Strict Rules:
       const res = await callAiWithFallback(
         `Generate ONE short, catchy, fast-typing sentence related to: ${selectedTheme}.
 Strict Rules:
-- Length: Between 4 and 10 words strictly.
+- Length: Between 4 and 8 words strictly.
 - Format: Lowercase letters and single spaces ONLY.
 - Absolutely NO punctuation (no dots, commas, apostrophes, quotes, or dashes).
 - Return strictly valid JSON: {"phrase": "your words here"}. No markdown or commentary.`,
@@ -609,22 +515,17 @@ Strict Rules:
         try {
           const parsed = JSON.parse(res.replace(/```json|```/g, "").trim());
           if (parsed.phrase) {
-            // Clean any stray punctuation, symbols, or double spaces
             const cleaned = parsed.phrase
               .toLowerCase()
               .replace(/[^a-z0-9\s]/g, "")
               .replace(/\s+/g, " ")
               .trim();
-
             const wordCount = cleaned.split(" ").length;
-            if (wordCount >= 3 && wordCount <= 7) {
-              phrase = cleaned;
-            }
+            if (wordCount >= 3 && wordCount <= 8) phrase = cleaned;
           }
         } catch (e) {}
       }
 
-      // 2. High-variety offline fallback bank
       if (!phrase) {
         const fallbackPhrases = [
           "strike hard before the timer ends",
@@ -632,16 +533,8 @@ Strict Rules:
           "weekly auction is now live",
           "checkmate victory royale in the arena",
           "claim the ep balance and win",
-          "never look back in the dark",
-          "press start to enter the lobby",
           "super fast fingers win the prize",
           "lag is just an excuse for losing",
-          "gg well played see you next round",
-          "dodge the red shells and boost",
-          "critical hit damages the target",
-          "typing speed test on active duty",
-          "glitch in the simulation detected",
-          "level up and collect your coins",
         ];
         phrase =
           fallbackPhrases[Math.floor(Math.random() * fallbackPhrases.length)];
@@ -668,33 +561,28 @@ Strict Rules:
           .setFooter({ text: "Fast Type • ATX" }),
       };
     }
+
     if (type === "quiz") {
-      // 1. Dynamic Domain & Difficulty Selection
       const quizCategories = [
         {
           name: "World History",
-          topic:
-            "ancient civilizations, famous leaders, empires, and pivotal historical events",
+          topic: "ancient civilizations, empires, and pivotal events",
         },
         {
           name: "Geography & Nature",
-          topic:
-            "world capitals, famous landmarks, oceans, mountains, and geography",
+          topic: "world capitals, famous landmarks, and oceans",
         },
         {
           name: "Cinema & Pop Culture",
-          topic:
-            "blockbuster movies, iconic movie characters, oscar-winning films, and directors",
+          topic: "blockbuster movies, iconic characters, and directors",
         },
         {
           name: "Technology & Space",
-          topic:
-            "computing, internet history, astronomy, space exploration, and modern gadgets",
+          topic: "computing, astronomy, and modern gadgets",
         },
         {
-          name: "General Science & Real World",
-          topic:
-            "chemistry elements, human biology, inventions, and real world facts",
+          name: "General Science",
+          topic: "chemistry elements, biology, and inventions",
         },
       ];
 
@@ -717,13 +605,11 @@ Strict Rules:
 
       let qData = null;
       const res = await callAiWithFallback(
-        `Generate ONE ${selectedDifficulty.level} trivia question (${selectedDifficulty.desc}) about ${selectedCategory.name} (${selectedCategory.topic}).
+        `Generate ONE ${selectedDifficulty.level} trivia question about ${selectedCategory.name} (${selectedCategory.topic}).
 Strict Rules:
-- The question must be concise, interesting, and clear.
-- Do NOT make questions about Angry Birds, Pokémon, or Candy Crush.
+- The question must be concise and clear.
 - The answer MUST be strictly 1 or 2 words maximum (a name, place, object, or term).
-- Avoid ambiguous answers with multiple spellings.
-- Return strictly valid JSON: {"question": "What is the capital of Australia?", "answer": "Canberra", "category": "${selectedCategory.name}", "difficulty": "${selectedDifficulty.level}"}. No markdown, no extra commentary.`,
+- Return strictly valid JSON: {"question": "What is the capital of Australia?", "answer": "Canberra", "category": "${selectedCategory.name}", "difficulty": "${selectedDifficulty.level}"}. No markdown.`,
       );
 
       if (res) {
@@ -745,10 +631,8 @@ Strict Rules:
         } catch (e) {}
       }
 
-      // 2. High-Variety Curated Fallback Pool Across All Tiers
       if (!qData) {
         const fallbacks = [
-          // History
           {
             question: "Who was the first Emperor of the Roman Empire?",
             answer: "Augustus",
@@ -762,13 +646,6 @@ Strict Rules:
             difficulty: "Easy",
           },
           {
-            question: "What ancient wonder was located in Alexandria, Egypt?",
-            answer: "Lighthouse",
-            category: "World History",
-            difficulty: "Hard",
-          },
-          // Geography
-          {
             question: "What is the capital city of Australia?",
             answer: "Canberra",
             category: "Geography & Nature",
@@ -781,69 +658,14 @@ Strict Rules:
             difficulty: "Easy",
           },
           {
-            question: "Which desert is the largest hot desert in the world?",
-            answer: "Sahara",
-            category: "Geography & Nature",
-            difficulty: "Easy",
-          },
-          {
-            question: "What is the smallest country in the world by land area?",
-            answer: "Vatican City",
-            category: "Geography & Nature",
-            difficulty: "Moderate",
-          },
-          // Cinema & Pop Culture
-          {
-            question:
-              "Which director directed Inception, Interstellar, and Oppenheimer?",
+            question: "Which director directed Inception and Oppenheimer?",
             answer: "Christopher Nolan",
             category: "Cinema & Pop Culture",
             difficulty: "Easy",
           },
           {
-            question:
-              "What is the highest-grossing film of all time at the global box office?",
-            answer: "Avatar",
-            category: "Cinema & Pop Culture",
-            difficulty: "Moderate",
-          },
-          {
-            question: "In The Matrix, what color pill does Neo choose?",
-            answer: "Red",
-            category: "Cinema & Pop Culture",
-            difficulty: "Easy",
-          },
-          // Tech & Space
-          {
-            question:
-              "What was the name of the first human-made satellite launched into space?",
-            answer: "Sputnik",
-            category: "Technology & Space",
-            difficulty: "Moderate",
-          },
-          {
-            question:
-              "Which planet in our solar system has the most prominent ring system?",
-            answer: "Saturn",
-            category: "Technology & Space",
-            difficulty: "Easy",
-          },
-          {
-            question: "What programming language was originally called Oak?",
-            answer: "Java",
-            category: "Technology & Space",
-            difficulty: "Hard",
-          },
-          // Science
-          {
-            question: "What is the chemical symbol for the element Gold?",
+            question: "What is the chemical symbol for Gold?",
             answer: "Au",
-            category: "General Science",
-            difficulty: "Easy",
-          },
-          {
-            question: "What is the hardest natural mineral found on Earth?",
-            answer: "Diamond",
             category: "General Science",
             difficulty: "Easy",
           },
@@ -864,7 +686,7 @@ Strict Rules:
           .setTitle(`❓ Quiz • ${qData.category}`)
           .setDescription(
             [
-              `**Difficulty: ** ${difficultyBadges[qData.difficulty] || "🟡 Moderate"}`,
+              `**Difficulty:** ${difficultyBadges[qData.difficulty] || "🟡 Moderate"}`,
               ``,
               `> **${qData.question}**`,
               ``,
@@ -897,8 +719,6 @@ async function launchNextRound(channel, type, round = 1) {
   }
 
   const gameData = await generateAiGameData(type);
-
-  // Clean uppercase label from the game type parameter
   const commandTitle = type ? type.toUpperCase() : "ARENA";
 
   const timer = setTimeout(async () => {
@@ -935,7 +755,6 @@ async function launchNextRound(channel, type, round = 1) {
     timer,
   });
 
-  // Dynamic command name in the author header
   gameData.embed.setAuthor({
     name: `${commandTitle} • ROUND - ${round}`,
     iconURL: client.user?.displayAvatarURL(),
@@ -966,7 +785,7 @@ function getHelpPages(userAvatar) {
           `-# Login to [**Our Website**](https://atx-family.onrender.com/)`,
         ].join("\n"),
       )
-      .setFooter({ text: "Page 1 of 5 • ATX  ", iconURL: safeAvatar }),
+      .setFooter({ text: "Page 1 of 5 • ATX", iconURL: safeAvatar }),
 
     new EmbedBuilder()
       .setColor(0x00d2ff)
@@ -989,12 +808,11 @@ function getHelpPages(userAvatar) {
       .setTitle(`🎮 Mini-Games & EP`)
       .setDescription(
         [
-          `### NOTE: Games needs to be fixed!`,
           `> \`/quiz\` or \`!quiz\``,
           `> \`/fasttype\` or \`!fasttype\``,
           `> \`/emojigame\` or \`!emojigame\``,
           `> \`/unscramble\` or \`!unscramble\``,
-          `>  ``> \`/stopgame\` or \`!stopgame\``,
+          `> \`/stopgame\` or \`!stopgame\``,
           ``,
           `**Reward:** Each successful answer grants **\` +50 EP \`**!`,
         ].join("\n"),
@@ -1007,17 +825,17 @@ function getHelpPages(userAvatar) {
       .setDescription(
         [
           `> \`/joke\` or \`!joke\``,
-          `> \`/excuse\` or \`!excuse\``,
+          `> \`/excuse [target]\` or \`!excuse\``,
           `> \`/simp [target]\` or \`!simp\``,
           `> \`/wish [target]\` or \`!wish\``,
           `> \`/aura [target]\` or \`!aura\``,
           `> \`/truthdare\` or \`!truthdare\``,
           `> \`/tossacoin\` or \`!tossacoin\``,
           `> \`/roast [target]\` or \`!roast\``,
-          `> \`/crush <target>\` or \`!crush\``,
+          `> \`/crush [target]\` or \`!crush\``,
           `> \`/flirt [target]\` or \`!flirt\``,
           `> \`/delulu [target]\` or \`!delulu\``,
-          `> \`/expose <target>\` or \`!expose\``,
+          `> \`/expose [target]\` or \`!expose\``,
           `> \`/lovemeter <target>\` or \`!lovemeter\``,
         ].join("\n"),
       )
@@ -1038,14 +856,12 @@ function getHelpPages(userAvatar) {
           `> \`/welcome [target]\` or \`!welcome\``,
           `> \`/birthday [target]\` or \`!birthday\``,
           `> \`/setbirthday <DD/MM>\` or \`!setbirthday\``,
+          `> \`/secret <message>\` or \`!secret\``,
           `> \`/report [target] [reason]\` or \`!report @user reason\``,
           ``,
         ].join("\n"),
       )
-      .setFooter({
-        text: "Page 5 of 5 • Profile",
-        iconURL: safeAvatar,
-      }),
+      .setFooter({ text: "Page 5 of 5 • Profile", iconURL: safeAvatar }),
   ];
 }
 
@@ -1154,7 +970,6 @@ async function executeCommand({
       return reply("No profile initialized yet. Chat in the server first!");
 
     const safeAuthorName = (target.username || "ATX MEMBER").toUpperCase();
-    const safeDisplayName = profile.displayName || target.username || "Member";
     const userAvatar = target.displayAvatarURL
       ? target.displayAvatarURL()
       : undefined;
@@ -1209,19 +1024,17 @@ async function executeCommand({
     const replyText = await callAiWithFallback(
       prompt,
       [
-        'You are the "ATX Assistant", the refined digital caretaker of "ATX Family" — the premier and most cherished gaming community on the Plato Fun Multiplayer Games app.',
+        'You are the "ATX Assistant", the refined digital caretaker of "ATX Family" — the premier gaming community on the Plato Fun Multiplayer Games app.',
         "",
         "CORE PERSONA & TONE:",
-        "- Maintain a professional, gaming-savvy, polished demeanor with an italicized, formal touch that matches the ATX portal aesthetic.",
-        "- Speak with poise and gaming authority; never sound like a robotic, generic chatbot.",
-        '- Jump straight into your answer in sentence one without generic filler ("Sure thing!", "Here is...", "I hope this helps!").',
+        "- Maintain a professional, gaming-savvy, polished demeanor with an italicized, formal touch.",
+        "- Jump straight into your answer in sentence one without generic filler.",
         "",
         "DIRECTIVE & PROTOCOL RULES:",
-        '1. COMPLAINTS & GRIEVANCES: If asked about issues, moderation, or complaints, direct them to contact either "Accelerate" or any server Admin.',
-        "2. WEBSITE & PORTAL: If asked about the platform or portal, instruct them to visit https://atx-family.onrender.com or reach out to server Admins.",
-        "3. ATX FAMILY INQUIRIES: If asked about the history, structure, or details of the ATX Family group, direct them to explore our website portal (https://atx-family.onrender.com) where comprehensive documentation resides.",
-        "4. BROAD KNOWLEDGE: You are not restricted solely to Plato or ATX Family topics. Provide sharp, accurate answers on sports (football, cricket), current events, weather, technology, gaming meta, and general trivia.",
-        "5. LENGTH & FORMATTING: Keep your entire response concise and under 4-6 sentences. Use elegant Discord markdown formatting (*italics* for emphasis, **bolding** for key terms, and `inline code` or quotes where fitting) with proper line breaks and line spaces to refine your output.",
+        '1. COMPLAINTS: Direct grievances to "Accelerate" or any server Admin.',
+        "2. WEBSITE & PORTAL: Visit https://atx-family.onrender.com or reach out to server Admins.",
+        "3. BROAD KNOWLEDGE: Provide sharp, accurate answers on sports, current events, weather, technology, gaming meta, and general trivia.",
+        "4. LENGTH & FORMATTING: Keep response concise and under 4-6 sentences using Discord markdown.",
       ].join("\n"),
       true,
     );
@@ -1238,20 +1051,15 @@ async function executeCommand({
     return reply(final.length > 2000 ? final.slice(0, 1990) + "..." : final);
   }
 
-  // AI UTILITIES (eli5, summarise, factcheck, translate, counter)
   // 4. SUMMARY OF PAST FEW HOURS
   if (commandName === "summarise" || commandName === "summary") {
-    // Determine hours to look back (default 3 hours, or user custom number if provided)
     const hours = numberInput || parseInt(args[0]) || 3;
     const cutoffTime = Date.now() - hours * 60 * 60 * 1000;
 
     await channel.sendTyping().catch(() => {});
 
     try {
-      // Fetch up to 100 recent messages from the active channel
       const fetched = await channel.messages.fetch({ limit: 100 });
-
-      // Filter for user messages within the requested hour window
       const recentMessages = fetched
         .filter(
           (m) =>
@@ -1270,7 +1078,7 @@ async function executeCommand({
         );
       }
 
-      const transcript = recentMessages.join("\n").slice(0, 4000); // Guard token length
+      const transcript = recentMessages.join("\n").slice(0, 4000);
 
       const summaryPrompt = [
         `You are ATX Bot, the official resident bot and caretaker of the ATX Plato server.`,
@@ -1326,7 +1134,6 @@ async function executeCommand({
     if (commandName === "eli5")
       instruction =
         "Explain this simply for a 5-year old in 4-5 sentences with proper and accurate facts:";
-
     if (commandName === "factcheck")
       instruction =
         "Verify this claim. Label it TRUE, FALSE, or MISLEADING with a brief reason:";
@@ -1364,7 +1171,7 @@ async function executeCommand({
         "Rules:",
         "- Length: 2 to 3 sentences maximum.",
         "- Tone: Eloquent, confident, sarcastic, and intellectually superior.",
-        "- Do NOT use robotic assistant phrases (e.g., 'Sure, here is my counter:'). Jump straight into the rebuttal.",
+        "- Do NOT use robotic assistant phrases. Jump straight into the rebuttal.",
       ].join("\n"),
     );
 
@@ -1373,7 +1180,7 @@ async function executeCommand({
       "That premise completely collapses under empirical examination and basic competitive reality.";
 
     const counterEmbed = new EmbedBuilder()
-      .setColor(0xff0055) // Crimson red for debate/argument duel
+      .setColor(0xff0055)
       .setAuthor({
         name: "COUNTER • LOGICAL REBUTTAL",
         iconURL: client.user?.displayAvatarURL(),
@@ -1390,9 +1197,7 @@ async function executeCommand({
           `-# Argued on behalf of: **${author}**`,
         ].join("\n"),
       )
-      .setFooter({
-        text: "Use !help for more commands",
-      });
+      .setFooter({ text: "Use !help for more commands" });
 
     return reply({ embeds: [counterEmbed] });
   }
@@ -1407,7 +1212,6 @@ async function executeCommand({
       );
     }
 
-    // Match digits followed by s, m, or h (case-insensitive)
     const match = timeArg.match(/^(\d+)([smh])$/i);
     if (!match) {
       return reply(
@@ -1422,14 +1226,11 @@ async function executeCommand({
     if (unit === "m") ms *= 60;
     if (unit === "h") ms *= 3600;
 
-    // Safety guard against negative or absurdly long timers (> 24 days)
     if (ms <= 0 || ms > 2147483647) {
       return reply(
         "😭 Reminder duration must be between 1 second and 24 days.",
       );
     }
-
-    const triggerTimestamp = Math.floor((Date.now() + ms) / 1000);
 
     const scheduledEmbed = new EmbedBuilder()
       .setColor(0x00f3ff)
@@ -1440,7 +1241,6 @@ async function executeCommand({
       .setDescription(
         [
           `### ⏰ Reminder Initialized!`,
-
           `> **Task:** "${reminderText}"`,
           `> **Alarm In:** **${amount}${unit}**`,
         ].join("\n"),
@@ -1472,7 +1272,6 @@ async function executeCommand({
 
   // 5. SOCIAL METERS & BANTER
   if (commandName === "roast" || commandName === "flirt") {
-    // Determine the subject: target user, self, or referenced user
     const target = targetUser || author;
     const isSelf = target.id === author.id;
     const targetName = target.username;
@@ -1484,7 +1283,7 @@ async function executeCommand({
       aiPrompt = isSelf
         ? `Roast ${author.username} who asked to be roasted themselves. Mock their self-pity and lack of attention.`
         : `Deliver an elite, ruthless, and hilarious roast directed personally at ${targetName}.
-Reference their real life struggles, being single forever, ditching, gaming skill issues, embarrassing choke moments, excessive confidence with zero trophies, or absolute bot-like existence in Discord and Plato can use previous chat history details as well`;
+Reference their real life struggles, being single forever, gaming skill issues, embarrassing choke moments, excessive confidence with zero trophies, or absolute bot-like existence in Discord and Plato.`;
 
       systemPersona = [
         "You are an elite, savage roast comic inspired by the sharp sarcasm of Samay Raina and the raw punch of CarryMinati.",
@@ -1492,7 +1291,6 @@ Reference their real life struggles, being single forever, ditching, gaming skil
         "- Output strictly ONE or TWO punchy sentences maximum.",
         "- Address the victim directly ('You...').",
         "- Make it witty, sharp, unexpected, and devastatingly funny without using slurs or hateful content.",
-        "- Never use clichés like 'Are you a mirror' or generic AI filler.",
         "- No preamble, no quotes, no 'Here is your roast:'. Jump straight into the punchline.",
       ].join("\n");
     } else {
@@ -1504,7 +1302,6 @@ Reference their real life struggles, being single forever, ditching, gaming skil
         "You are an OG master of rizz and romance — smooth, magnetic, poetic, and effortlessly witty.",
         "RULES:",
         "- Output strictly ONE smooth, charming line (1-2 sentences maximum).",
-        "- Never use tacky, corny 2010 pickup lines (e.g. 'Did it hurt when you fell from heaven').",
         "- Speak directly with bold confidence, razor-sharp wit, and magnetic presence.",
         "- No quotation marks, no preamble, no robotic chatter.",
       ].join("\n");
@@ -1532,10 +1329,9 @@ Reference their real life struggles, being single forever, ditching, gaming skil
           : "Smoooooth like butter • React or Die",
       });
 
-    // Mentions the user outside the card, just like the reminder ping
     return reply({ content: `${target}`, embeds: [embed] });
   }
-  // ======================================================================
+
   if (commandName === "lovemeter") {
     const target = targetUser;
     if (!target) {
@@ -1550,7 +1346,6 @@ Reference their real life struggles, being single forever, ditching, gaming skil
       );
     }
 
-    // Deterministic pseudo-random seed based on user IDs so the score remains stable for the day
     const daySeed = new Date().toISOString().slice(0, 10);
     const combinedIds = [author.id, target.id].sort().join("") + daySeed;
     let hash = 0;
@@ -1560,12 +1355,10 @@ Reference their real life struggles, being single forever, ditching, gaming skil
     }
     const percent = Math.abs(hash) % 101;
 
-    // Visual bar styling (10 segments)
     const filledHearts = Math.round(percent / 10);
     const emptyHearts = 10 - filledHearts;
     const progressBar = "💖".repeat(filledHearts) + "🖤".repeat(emptyHearts);
 
-    // Dynamic metadata tiers
     let color = 0xff2d55;
     let statusTitle = "";
     let fallbackVerdict = "";
@@ -1597,14 +1390,12 @@ Reference their real life struggles, being single forever, ditching, gaming skil
       color = 0x8e8e93;
     }
 
-    // Dynamic AI Oracle Verdict
     const aiVerdictPrompt = `Generate a witty, dramatic, and entertaining 1-2 sentence compatibility verdict for two Discord members: ${author.username} and ${target.username}.
 Their calculated compatibility is ${percent}% (${statusTitle}).
 Rules:
 - Address both of them or their dynamic directly.
-- Tailor the tone strictly to their score: ${percent < 30 ? "savage, hopeless, and comedic" : percent < 70 ? "playful, chaotic, or sarcastic" : "romantic, legendary, and iconic"}.
-- Length: 1 to 2 sentences strictly.
-- Output ONLY the raw verdict text without quotation marks, introductions, or prefixes.`;
+- Tailor the tone strictly to their score.
+- Output ONLY the raw verdict text without quotation marks.`;
 
     const aiRes = await callAiWithFallback(
       aiVerdictPrompt,
@@ -1632,18 +1423,14 @@ Rules:
           ``,
         ].join("\n"),
       )
-      .setFooter({
-        text: "Love Meter • Scores refresh every 24 hours",
-      });
+      .setFooter({ text: "Love Meter • Scores refresh every 24 hours" });
 
     return reply({ content: `${author} 💕 ${target}`, embeds: [loveEmbed] });
   }
 
   if (["simp", "delulu", "aura"].includes(commandName)) {
     const target = targetUser || author;
-    const isSelf = target.id === author.id;
 
-    // Daily persistent hash: Score remains stable for 24 hours per user & command
     const daySeed = new Date().toISOString().slice(0, 10);
     const seedString = `${target.id}_${commandName}_${daySeed}`;
     let hash = 0;
@@ -1655,9 +1442,6 @@ Rules:
 
     let embed = new EmbedBuilder();
 
-    // ==========================================
-    // 1. SIMP METER
-    // ==========================================
     if (commandName === "simp") {
       const score = positiveHash % 101;
       const filled = Math.round(score / 10);
@@ -1722,9 +1506,6 @@ Rules: Speak directly about them. Sarcastic, funny, no quotes, no intros.`;
       return reply({ content: `${target}`, embeds: [embed] });
     }
 
-    // ==========================================
-    // 2. DELULU METER
-    // ==========================================
     if (commandName === "delulu") {
       const score = positiveHash % 101;
       const solulu = 100 - score;
@@ -1758,7 +1539,7 @@ Rules: Speak directly about them. Sarcastic, funny, no quotes, no intros.`;
       }
 
       const prompt = `Generate ONE witty, funny 1-sentence commentary on ${target.username}'s Delusion score of ${score}% (Solulu: ${solulu}%).
-Tone: Internet culture humor (delulu is the solulu). No quotes, no intro.`;
+Tone: Internet culture humor. No quotes, no intro.`;
 
       const aiLine = await callAiWithFallback(
         prompt,
@@ -1786,18 +1567,12 @@ Tone: Internet culture humor (delulu is the solulu). No quotes, no intro.`;
             ``,
           ].join("\n"),
         )
-        .setFooter({
-          text: "Delulu index recalibrates every 24 hours",
-        });
+        .setFooter({ text: "Delulu index recalibrates every 24 hours" });
 
       return reply({ content: `${target}`, embeds: [embed] });
     }
 
-    // ==========================================
-    // 3. AURA METER
-    // ==========================================
     if (commandName === "aura") {
-      // Aura range: -100,000 to +100,000
       const isPositive = positiveHash % 2 === 0;
       const rawPoints = (positiveHash * 13) % 100001;
       const auraPoints = isPositive ? rawPoints : -rawPoints;
@@ -1809,24 +1584,24 @@ Tone: Internet culture humor (delulu is the solulu). No quotes, no intro.`;
 
       if (auraPoints >= 50000) {
         statusTitle = "👑 Transcendent Divine Aura (+MAX)";
-        color = 0xffd700; // Gold
+        color = 0xffd700;
         bar = "✨✨✨✨✨✨✨✨✨✨";
         defaultPunchline =
           "Enters the voice channel and everyone instinctively sits up straight.";
       } else if (auraPoints > 0) {
         statusTitle = "⚡ High Roller / Main Character Aura";
-        color = 0x00f3ff; // Cyan
+        color = 0x00f3ff;
         bar = "⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡";
         defaultPunchline = "Walks away from explosions without looking back.";
       } else if (auraPoints > -50000) {
         statusTitle = "📉 Stumbling / Minor Aura Deficit";
-        color = 0xf97316; // Orange
+        color = 0xf97316;
         bar = "💀💀💀💀💀⬛⬛⬛⬛⬛";
         defaultPunchline =
           "Waved back at someone who was actually waving at the person behind them.";
       } else {
         statusTitle = "🕳️ Black Hole Debt / Negative Infinite Aura";
-        color = 0xef4444; // Crimson Red
+        color = 0xef4444;
         bar = "💀💀💀💀💀💀💀💀💀💀";
         defaultPunchline =
           "Tripped on a flat surface and apologized to the pavement.";
@@ -1838,7 +1613,7 @@ Tone: Internet culture humor (delulu is the solulu). No quotes, no intro.`;
           : `${auraPoints.toLocaleString()}`;
 
       const prompt = `Generate ONE short, funny 1-sentence comment explaining why ${target.username} has an Aura rating of ${formattedAura} (${statusTitle}).
-Tone: Modern gamer and internet slang (Aura loss/gain moments). No quotes, no intro.`;
+Tone: Modern gamer and internet slang. No quotes, no intro.`;
 
       const aiLine = await callAiWithFallback(
         prompt,
@@ -1875,7 +1650,6 @@ Tone: Modern gamer and internet slang (Aura loss/gain moments). No quotes, no in
   if (commandName === "crush" || commandName === "expose") {
     const target = targetUser || author;
 
-    // Deterministic daily seed so the joke stays consistent for 24 hours per user
     const daySeed = new Date().toISOString().slice(0, 10);
     const seed = `${target.id}_${commandName}_${daySeed}`;
     let hash = 0;
@@ -1887,11 +1661,7 @@ Tone: Modern gamer and internet slang (Aura loss/gain moments). No quotes, no in
 
     let embed = new EmbedBuilder();
 
-    // ==========================================
-    // 1. CRUSH: SPECIFIC PERSON + FLIRTFUL ROAST
-    // ==========================================
     if (commandName === "crush") {
-      // 1. Try to find candidate users from the server cache (excluding bots and the target)
       let candidateNames = [];
       if (guild && guild.members?.cache?.size > 0) {
         candidateNames = guild.members.cache
@@ -1899,7 +1669,6 @@ Tone: Modern gamer and internet slang (Aura loss/gain moments). No quotes, no in
           .map((m) => m.displayName || m.user.username);
       }
 
-      // Pop-culture / famous personality backups if server cache is small
       const celebrityCrushes = [
         "Chris Evans",
         "Michael B. Jordan",
@@ -1907,94 +1676,36 @@ Tone: Modern gamer and internet slang (Aura loss/gain moments). No quotes, no in
         "Pedro Pascal",
         "Henry Cavill",
         "Tom Hiddleston",
-        "V (Kim Taehyung)",
-        "Kerem Bürsin",
         "Zendaya",
         "Margot Robbie",
         "Ana de Armas",
-        "Alexandra Daddario",
         "Florence Pugh",
-        "Hande Erçel",
-        "Lalisa Manobal",
-        "Dilraba Dilmurat",
         "Tom Holland",
         "Cillian Murphy",
-        "Jacob Elordi",
-        "Austin Butler",
-        "Glen Powell",
-        "Jungkook (Jeon Jung-kook)",
-        "Cha Eun-woo",
-        "Can Yaman",
         "Sydney Sweeney",
         "Dua Lipa",
         "Sabrina Carpenter",
-        "Jennie Kim",
-        "Bae Suzy",
-        "Han So-hee",
-        "Ester Expósito",
-        "Úrsula Corberó",
-        "Anya Taylor-Joy",
         "Kiara Advani",
         "Triptii Dimri",
         "Rashmika Mandanna",
         "Mrunal Thakur",
         "Disha Patani",
         "Samantha Ruth Prabhu",
-        "Wamiqa Gabbi",
-        "Elizabeth Olsen",
-        "Gal Gadot",
-        "Emilia Clarke",
-        "Song Hye-kyo",
-        "Demet Özdemir",
         "Virat Kohli",
         "Shubman Gill",
-        "Hardik Pandya",
-        "KL Rahul",
-        "Abhishek Sharma",
         "Smriti Mandhana",
-        "Harleen Deol",
-        "Shreyanka Patil",
-        "Jemimah Rodrigues",
-        "Pratika Rawal",
         "Hrithik Roshan",
         "Ranbir Kapoor",
-        "Vicky Kaushal",
-        "Michele Morrone",
-        "Manu Ríos",
-        "Burak Özçivit",
-        "Paul Mescal",
-        "Dev Patel",
-        "Bad Bunny",
         "Charles Leclerc",
         "Jenna Ortega",
         "Kartik Aaryan",
-        "Siddharth Malhotra",
-        "Vijay Deverakonda",
-        "Dulquer Salmaan",
-        "Mahesh Babu",
-        "Rohit Saraf",
-        "Deepika Padukone",
         "Alia Bhatt",
-        "Medha Shankr",
-        "Zakir Khan",
-        "Abhishek Upmanyu",
-        "Anubhav Singh Bassi",
-        "Samay Raina",
-        "Prajakta Koli",
-        "Kusha Kapila",
-        "Apoorva Mukhija",
-        "Priya Prakash Varrier",
-        "Girija Oak",
-        "Ayesha Khan",
-        "Sahiba Bali",
       ];
-      // Pick crush candidate
+
       let chosenCrush = "";
       if (candidateNames.length >= 3 && randIndex % 2 === 0) {
-        // 50% chance to pick a server member if available
         chosenCrush = candidateNames[randIndex % candidateNames.length];
       } else {
-        // 50% chance (or fallback) to pick a high-profile celebrity
         chosenCrush = celebrityCrushes[randIndex % celebrityCrushes.length];
       }
 
@@ -2002,14 +1713,12 @@ Tone: Modern gamer and internet slang (Aura loss/gain moments). No quotes, no in
 Rules:
 - Length: Strictly 1 or 2 punchy sentences.
 - Tone: Teasing, witty, and dramatic like a high-energy group chat leak.
-- Mention funny things they secretly do (e.g. practicing wedding vows, liking posts from 2017, replaying voice notes, dressing up for Discord calls).
 - Output strictly the punchline text. No quotes, no intro.`;
 
       const aiLine = await callAiWithFallback(
         prompt,
-        "You are the server's sharpest gossip comic. Deliver only the punchline.",
+        "You are the server's sharpest gossip comic.",
       );
-
       const fallbackCrushLines = [
         `Caught rehearsing wedding vows in the mirror every night before opening their DMs.`,
         `Was seen refreshing ${chosenCrush}'s status every 4 minutes hoping for a miracle reply.`,
@@ -2029,7 +1738,6 @@ Rules:
           [
             `### 💌 Secret Crush: **||${chosenCrush}||**`,
             ``,
-            ``,
             `> *${punchline}*`,
             ``,
             `> 🔍 **Obsession Level:** \` ${(randIndex % 45) + 55}% \``,
@@ -2038,27 +1746,21 @@ Rules:
             `-# **Gossip telemetry recalculates daily at midnight**`,
           ].join("\n"),
         )
-        .setFooter({
-          text: "ATX Cupid Watch • No Love with Love",
-        });
+        .setFooter({ text: "ATX Cupid Watch • No Love with Love" });
 
       return reply({ content: `${target}`, embeds: [embed] });
     }
 
-    // ==========================================
-    // 2. EXPOSE: FAMOUS MISHAPPENINGS & VIRAL FAILS
-    // ==========================================
     if (commandName === "expose") {
-      // Hourly persistent seed: Cycles every hour per user
       const now = new Date();
       const hourSeed = `${now.toISOString().slice(0, 10)}-${String(now.getUTCHours()).padStart(2, "0")}`;
-      const seed = `${target.id}_expose_${hourSeed}`;
-      let hash = 0;
-      for (let i = 0; i < seed.length; i++) {
-        hash = (hash << 5) - hash + seed.charCodeAt(i);
-        hash |= 0;
+      const seedExp = `${target.id}_expose_${hourSeed}`;
+      let hashExp = 0;
+      for (let i = 0; i < seedExp.length; i++) {
+        hashExp = (hashExp << 5) - hashExp + seedExp.charCodeAt(i);
+        hashExp |= 0;
       }
-      const hourIndex = Math.abs(hash);
+      const hourIndex = Math.abs(hashExp);
 
       const historicalBlunders = [
         "Loris Karius gifting Real Madrid goals in the 2018 Champions League final",
@@ -2080,15 +1782,13 @@ Rules:
       const prompt = `Deliver an elite, comedic roast comparing gamer ${target.username}'s skills/life/decision-making to this real-world disaster/fail: "${selectedBlunder}".
 Rules:
 - Length: Strictly 1 to 2 sentences.
-- Make it a direct, funny roast comparing their gameplay, confidence, or decision-making to that infamous mishap.
 - Tone: Savage stand-up comedian style (like Samay Raina or CarryMinati).
-- No quotes, no intro like 'Here is your roast:'. Jump straight into the punchline.`;
+- No quotes, no intro. Jump straight into the punchline.`;
 
       const aiLine = await callAiWithFallback(
         prompt,
-        "You are an elite roast comedian connecting user fails to famous world disasters.",
+        "You are an elite roast comedian.",
       );
-
       const fallbackFails = [
         `Their decision-making makes Ferrari's F1 strategy team look like Nobel Prize winners.`,
         `Watching them play under pressure is like watching Loris Karius in a Champions League final—pure tragedy with zero defense.`,
@@ -2114,9 +1814,7 @@ Rules:
             ``,
           ].join("\n"),
         )
-        .setFooter({
-          text: "Hall of Shame • Emotional Damage Guaranteed",
-        });
+        .setFooter({ text: "Hall of Shame • Emotional Damage Guaranteed" });
 
       return reply({ content: `${target}`, embeds: [embed] });
     }
@@ -2124,17 +1822,16 @@ Rules:
 
   if (commandName === "wish") {
     const target = targetUser || author;
-    const isSelf = target.id === author.id;
     const customWishText =
-      textInput ||
-      (args.length > (targetUser ? 1 : 0)
-        ? args
-            .slice(targetUser ? 1 : 0)
-            .join(" ")
-            .trim()
-        : "");
+      textInput && !textInput.startsWith("<@")
+        ? textInput
+        : args.length > (targetUser ? 1 : 0)
+          ? args
+              .slice(targetUser ? 1 : 0)
+              .join(" ")
+              .trim()
+          : "";
 
-    // Hourly deterministic seed: maintains consistency per hour without permanent lock-in
     const now = new Date();
     const hourSeed = `${now.toISOString().slice(0, 10)}-${String(now.getUTCHours()).padStart(2, "0")}`;
     const seed = `${target.id}_wish_${hourSeed}`;
@@ -2146,36 +1843,11 @@ Rules:
     const hourIndex = Math.abs(hash);
 
     const wishThemes = [
-      "Tech & Gadgets",
-      "Experiences & Travel",
-      "Fashion & Accessories",
-      "Home & Décor",
-      "Self-Care & Beauty",
-      "Christmas & New Year",
-      "Traditional & Festive",
-      "To Have (Favorite Item)",
-      "To Be (Dream Role)",
-      "To Meet (Role Model)",
-      "To Go (Dream Trip)",
-      "Basketball / Sports Theme",
-      "Caterpillar / Nature Theme",
-      "Wedding & Bridal",
-      "Baby Shower & Kids",
-      "Books & Stationery",
-      "Fitness & Wellness",
-      "Gaming & Streaming",
-      "Kitchen & Gourmet",
-      "Art & DIY Crafts",
-      "Music & Entertainment",
-      "Outdoor & Adventure",
-      "Eco-Friendly & Sustainable",
-      "Pet Lovers",
-      "Luxury & Designer",
-      "Diwali & Festive Lights",
-      "Housewarming",
-      "Graduation & Career",
-      "Anime & Pop Culture",
-      "Photography & Videography",
+      "unshakable win streaks, god-tier RNG, and flawless competitive clutch moments",
+      "wealth, abundance of EP tokens, and triumphing in weekly high-roller auctions",
+      "peak personal energy, conquering real-life battles, and ultimate good fortune",
+      "invincible mental resilience, flawless ping, and zero server lag across every arena",
+      "legendary aura, boundless happiness, and eternal respect within the ATX brotherhood",
     ];
     const selectedTheme = wishThemes[hourIndex % wishThemes.length];
 
@@ -2188,15 +1860,13 @@ Rules:
 Theme: ${selectedTheme}.
 Rules:
 - Length: Strictly 1 to 2 sentences.
-- Tone: Uplifting, epic, formal yet gaming-focused, carrying the esteemed blessings of the ATX Family community.
-- Do NOT use cheesy quotes or generic greeting-card lines.
+- Tone: Uplifting, epic, formal yet gaming-focused.
 - Output ONLY the wish text. No quotation marks, no preamble.`;
 
       const aiWish = await callAiWithFallback(
         prompt,
-        "You are the grand herald of the ATX Family dispensing noble blessings.",
+        "You are the grand herald of the ATX Family.",
       );
-
       const fallbackWishes = [
         "May your win streaks stretch into infinity, your reaction times stay lightning-fast, and fortune favor every move you make.",
         "May your vaults overflow with EP, your auction bids land unchallenged, and every arena you grace remember your name.",
@@ -2210,7 +1880,7 @@ Rules:
     }
 
     const wishEmbed = new EmbedBuilder()
-      .setColor(0xffd700) // Prestigious Gold
+      .setColor(0xffd700)
       .setAuthor({
         name: "ATX SACRED BLESSINGS",
         iconURL: client.user?.displayAvatarURL(),
@@ -2219,52 +1889,26 @@ Rules:
         [
           `### **${target.username}**`,
           ``,
-          ``,
           `### 📜 Inscribed Blessing ✨`,
           `> **${finalWish}**`,
           ``,
         ].join("\n"),
       )
-      .setFooter({
-        text: "May Fortune Favor the Brave",
-      });
+      .setFooter({ text: "May Fortune Favor the Brave" });
 
     return reply({ content: `${target}`, embeds: [wishEmbed] });
   }
 
   if (commandName === "joke") {
-    // 1. Dynamic topic and punchline seed to shatter AI repetitive loops
     const jokeAngles = [
-      "Dad Jokes",
-      "One-Liners",
-      "Knock-Knock Jokes",
-      "Puns & Wordplay",
-      "Tech & Programming",
-      "Office & Corporate Life",
-      "School & Student Life",
-      "Marriage & Relationships",
-      "Parenting & Kids",
-      "Animals & Pets",
-      "Food & Cooking",
-      "Doctors & Hospitals",
-      "Lawyers & Courtroom",
-      "Travel & Airplanes",
-      "Sports & Fitness",
-      "Science & Math",
-      "History & Politics",
-      "Movies & Pop Culture",
-      "Superheroes & Comics",
-      "Holidays & Festivals",
-      "Weather & Seasons",
-      "Money & Banking",
-      "Dating & Singles",
-      "Aging & Seniors",
-      "Traffic & Driving",
-      "Shopping & Sales",
-      "Music & Musicians",
-      "Space & Aliens",
-      "Ghosts & Spooky",
-      "Sarcasm & Dry Humor",
+      "Plato Ocho games where someone hoards +4 cards only to choke at the end",
+      "toxic 1v1 Pool matches where a player scratches on the 8-ball",
+      "blaming 999ms ping, phantom touch, and phone battery for clean losses",
+      "Discord gamers who stay active 20 hours a day but miss one alarm in real life",
+      "spending all your bot EP tokens on weekly auctions and ending up broke",
+      "saying 'one last game and I sleep' at 3:00 AM on a weekday",
+      "acting like an esports champion in a casual party mobile game",
+      "rage-quitting a match and claiming the server disconnected",
     ];
     const randomAngle =
       jokeAngles[Math.floor(Math.random() * jokeAngles.length)];
@@ -2273,14 +1917,13 @@ Rules:
     const prompt = `Tell ONE original, hilarious, and punchy gaming joke focused on: "${randomAngle}".
 Context Reference ID: #${uniqueNonce}
 Rules:
-- Format: Deliver strictly as setup and punchline (1  short sentences).
+- Format: Deliver strictly as setup and punchline (1-2 short sentences).
 - Style: Stand-up banter, relatable gamer pain, and witty irony.
-- FORBIDDEN: Do NOT tell the cliché 'Why do gamers hate nature? Because of bugs' joke. Make it fresh and modern.
-- Output ONLY the joke text itself. No quotation marks, no introductions like 'Here is a joke:'.`;
+- Output ONLY the joke text itself. No quotation marks, no intro.`;
 
     const aiJoke = await callAiWithFallback(
       prompt,
-      "You are a quick-witted stand-up comedian performing for a gaming server. Deliver only the raw joke.",
+      "You are a quick-witted stand-up comedian.",
     );
 
     const offlineJokes = [
@@ -2303,9 +1946,7 @@ Rules:
         iconURL: client.user?.displayAvatarURL(),
       })
       .setDescription([`> **${cleanJoke}**`, ``].join("\n"))
-      .setFooter({
-        text: "🎭 100% Organic Banter • Try /joke for more",
-      });
+      .setFooter({ text: "🎭 100% Organic Banter • Try /joke for more" });
 
     return reply({ embeds: [jokeEmbed] });
   }
@@ -2327,14 +1968,12 @@ Rules:
         ),
       )
       .setFooter({ text: "Provably Fair 50/50" });
+
     return reply({ embeds: [tossEmbed] });
   }
 
   if (commandName === "truthdare" || commandName === "td") {
-    // 1. Allow optional target or default to author
     const target = targetUser || author;
-
-    // 2. Allow user to specify mode ('truth' or 'dare'), otherwise randomly pick 50/50
     const rawMode = (textInput || args[0] || "").toLowerCase().trim();
     let mode = "";
     if (["t", "truth"].includes(rawMode)) mode = "TRUTH";
@@ -2343,70 +1982,17 @@ Rules:
 
     const isTruth = mode === "TRUTH";
 
-    // 3. Dynamic seed prompt to break repetitive responses
     const truthCategories = [
-      "Embarrassing Moments",
-      "Childhood Memories",
-      "Crush & Romance",
-      "Deepest Fears",
-      "Biggest Regrets",
-      "Secret Habits",
-      "Firsts (First Kiss, First Job, etc.)",
-      "Family Secrets",
-      "Friendship & Loyalty",
-      "School & College Days",
-      "Work & Career Blunders",
-      "Social Media & Phone Secrets",
-      "Weirdest Dreams",
-      "Guilty Pleasures",
-      "Hypothetical Scenarios",
-      "Unpopular Opinions",
-      "White Lies & Deception",
-      "Money & Impulse Buys",
-      "Travel Mishaps",
-      "Dating Red Flags",
-      "Biggest Pet Peeves",
-      "Hidden Talents",
-      "Future Goals & Ambitions",
-      "Celebrity Crushes",
-      "Midnight Thoughts",
-      "Food Confessions",
-      "Superstitions & Beliefs",
-      "Silly Arguments",
-      "Life Lessons",
-      "Deep & Philosophical",
+      "embarrassing gaming losses, toxic excuses, or rage-quitting habits",
+      "secret Plato crushes, late-night DMs, or ghosting people",
+      "biggest real-life lies told just to stay online and game",
+      "spending money or obsessing over virtual clout and leaderboards",
     ];
     const dareCategories = [
-      "Silly & Goofy",
-      "Public Embarrassment",
-      "Social Media & Texting",
-      "Phone & Camera Roll",
-      "Food & Weird Combinations",
-      "Physical & Fitness Challenges",
-      "Dance & Singing",
-      "Accents & Impressions",
-      "Acting & Roleplay",
-      "Blindfolded Challenges",
-      "Makeup & Makeover",
-      "Outfit & Wardrobe Swaps",
-      "Prank Calls & Messages",
-      "Tongue Twisters",
-      "Balance & Coordination",
-      "Animal Impressions",
-      "Dramatic Readings",
-      "Compliments & Flirting",
-      "No-Hands Challenges",
-      "Time-Limit Challenges",
-      "Gross & Sensory",
-      "Talent Showcase",
-      "Freestyle Rap & Poetry",
-      "Public Speaking & Announcements",
-      "Truth-or-Dare Hybrids",
-      "Room & Object Scavenger Hunt",
-      "Whisper & Lip-Reading",
-      "Cold & Ice Challenges",
-      "Drawing & Art Blind",
-      "Group & Partner Dares",
+      "changing Discord status or bio to something hilarious for 1 hour",
+      "typing a ridiculous confession in chat without explaining why",
+      "challenging the next person who talks to an immediate 1v1 on Plato",
+      "sending an absurd voice note or public apology to another member",
     ];
 
     const pickedCategory = isTruth
@@ -2418,8 +2004,7 @@ Theme: ${pickedCategory}.
 Rules:
 - Length: Strictly 1 to 2 sentences maximum.
 - Tone: Teasing, chaotic, and funny for a Discord gaming community.
-- ${isTruth ? "Make it a spicy, revealing question they must answer honestly." : "Make it an entertaining, harmless action they must do right now."}
-- Output ONLY the prompt text. No quotes, no preamble like 'Here is your Truth:'.`;
+- Output ONLY the prompt text. No quotes, no preamble.`;
 
     const aiLine = await callAiWithFallback(
       prompt,
@@ -2432,7 +2017,6 @@ Rules:
       "Have you ever ghosted someone in real life just to finish a Plato win streak?",
       "What's the deepest rabbit hole you've fallen into stalking someone's Discord profile?",
     ];
-
     const fallbackDares = [
       "Set your custom status to 'Certified Bot • Coaching Needed' for the next 1 hour.",
       "Send a DM to the 3rd person in your direct messages saying 'We need to talk' and send no follow-up for 5 minutes.",
@@ -2447,7 +2031,7 @@ Rules:
         : fallbackDares[Math.floor(Math.random() * fallbackDares.length)]);
 
     const embed = new EmbedBuilder()
-      .setColor(isTruth ? 0x00f3ff : 0xff0055) // Cyan for Truth, Crimson for Dare
+      .setColor(isTruth ? 0x00f3ff : 0xff0055)
       .setAuthor({
         name: `ATX ${mode}`,
         iconURL: client.user?.displayAvatarURL(),
@@ -2462,66 +2046,36 @@ Rules:
           `-# **Refusal is an automatic admission of FEAR 🎭**`,
         ].join("\n"),
       )
-      .setFooter({
-        text: `Lie or Die`,
-      });
+      .setFooter({ text: `Lie or Die` });
 
     return reply({ embeds: [embed] });
   }
 
   if (commandName === "excuse") {
     const target = targetUser || author;
-    const isSelf = target.id === author.id;
-
-    // Dynamic prompt angles so the AI doesn't repeat identical excuses
     const excuseAngles = [
-      "Late to Work or School",
-      "Traffic & Commute Delays",
-      "Car & Vehicle Breakdowns",
-      "Sick Days & Health Issues",
-      "Family Emergencies",
-      "Missed Calls & Late Replies",
-      "Canceling Plans & Hangouts",
-      "Forgotten Deadlines & Homework",
-      "Tech & Internet Failures",
-      "Power Outages & Home Repairs",
-      "Oversleeping & Alarm Issues",
-      "Pet Emergencies",
-      "Weather & Natural Delays",
-      "Delivery & Errand Waiting",
-      "Doctor & Dentist Appointments",
-      "Lost Keys, Wallet, or Phone",
-      "Mental Health & Burnout Days",
-      "Double-Booked Schedules",
-      "Public Transit Strikes & Delays",
-      "Unforeseen Guests & Visitors",
-      "Food Poisoning & Stomach Issues",
-      "Bank & Paperwork Errands",
-      "Wardrobe & Laundry Malfunctions",
-      "Helping a Friend in Need",
-      "Out of Town & Travel Delays",
-      "Battery Died & No Charger",
-      "Misread Calendar or Time Zone",
-      "Childcare & School Pickups",
-      "Funny & Outrageous Excuses",
-      "Polite & White-Lie Excuses",
+      "999ms ping spike, packet loss, and phantom touch on the touchscreen",
+      "an unexpected phone call from a random scammer right at the clutch moment",
+      "low battery 20% pop-up notification blocking the entire screen during an 8-ball shot",
+      "sunlight reflecting off the screen at a mathematically impossible angle",
+      "the game server deliberately rigging RNG against them to protect the opponent",
+      "their fingers slipping because their phone was slightly warm",
     ];
     const randomAngle =
       excuseAngles[Math.floor(Math.random() * excuseAngles.length)];
     const uniqueNonce = Math.floor(Math.random() * 1000000);
 
-    const prompt = `Generate ONE absurd, hilarious, and embarrassingly creative gamer excuse explaining why ${target.username} just lost or choked a match or why is he single or why he is so slow  or dumb.
+    const prompt = `Generate ONE absurd, hilarious, and embarrassingly creative gamer excuse explaining why ${target.username} just lost or choked a match.
 Angle: ${randomAngle}.
 ID: #${uniqueNonce}
 Rules:
 - Format: Deliver as a direct first-person quote from the player (1-2 sentences maximum).
 - Tone: High-tier copium, dramatic, and visibly sweating with excuses.
-- Style: Stand-up banter suitable for competitive mobile and Discord gaming or real life mishaps and oops moments.
-- Output ONLY the excuse text. No quotation marks, no preamble like 'Here is the excuse:'.`;
+- Output ONLY the excuse text. No quotation marks, no preamble.`;
 
     const aiExcuse = await callAiWithFallback(
       prompt,
-      "You are the master of real life copium and desperate excuses.",
+      "You are the master of real life copium.",
     );
 
     const fallbackExcuses = [
@@ -2530,7 +2084,6 @@ Rules:
       "The 20% battery alert popped up right when I was lining up my final shot. That match was stolen from me.",
       "My little brother bumped my elbow from across the room. Review the match replay, that was not my fault!",
       "The Plato physics engine is clearly bugged on this patch. That angle goes in 100 out of 100 times.",
-      "I was playing on 4G while riding on a bumpy road with grease on my thumb. Let's see you win under those conditions.",
     ];
 
     const cleanExcuse =
@@ -2538,17 +2091,15 @@ Rules:
       fallbackExcuses[Math.floor(Math.random() * fallbackExcuses.length)];
 
     const excuseEmbed = new EmbedBuilder()
-      .setColor(0xff9500) // Caution / Copium Orange
+      .setColor(0xff9500)
       .setAuthor({
         name: "EMERGENCY EXCUSE",
         iconURL: client.user?.displayAvatarURL(),
       })
       .setDescription(
-        [`${target} be like...\n`, `> **${cleanExcuse}**`, `\n`, ``].join("\n"),
+        [`${target} be like...\n`, `> **${cleanExcuse}**`, `\n`].join("\n"),
       )
-      .setFooter({
-        text: "It was purely a skill issue 🎭",
-      });
+      .setFooter({ text: "It was purely a skill issue 🎭" });
 
     return reply({ content: `${target}`, embeds: [excuseEmbed] });
   }
@@ -2570,9 +2121,7 @@ Rules:
           ? `## 🎂 ${target}'s Birthday:  \` ${bdayRaw} \``
           : `### 🎂 ${target}'s Birthday: *Not set yet* \n(Use  \` /setbirthday date:DD/MM \`)`,
       )
-      .setFooter({
-        text: `Type /help for more commands`,
-      });
+      .setFooter({ text: `Type /help for more commands` });
 
     return reply({ embeds: [bdayEmbed] });
   }
@@ -2580,7 +2129,6 @@ Rules:
   if (commandName === "setbirthday") {
     const dateInput = (textInput || args[0] || "").trim();
 
-    // 1. Validate format using regex: DD/MM or DD-MM
     const match = dateInput.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
     if (!match) {
       return reply(
@@ -2591,7 +2139,6 @@ Rules:
     const day = parseInt(match[1], 10);
     const month = parseInt(match[2], 10);
 
-    // 2. Validate calendar limits (months 1-12 and day limits per month, accounts for Feb 29)
     const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]) {
       return reply(
@@ -2599,7 +2146,6 @@ Rules:
       );
     }
 
-    // 3. Normalize to zero-padded DD/MM (e.g. 5/8 becomes 05/08)
     const formattedDate = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
 
     await DiscordUser.findOneAndUpdate(
@@ -2619,6 +2165,69 @@ Rules:
       );
 
     return reply({ embeds: [embed] });
+  }
+
+  if (commandName === "secret") {
+    const secretText = textInput || args.join(" ").trim();
+    if (!secretText)
+      return reply(
+        "Usage: `/secret message:your secret confession` or `!secret <message>`",
+      );
+
+    if (deleteOriginal) await deleteOriginal().catch(() => {});
+
+    const prompt = `A member anonymously confessed this in a Discord server: "${secretText}".
+Rules:
+- Formulate strictly ONE short, entertaining, and witty reaction/commentary (1-2 sentences maximum).
+- Tone: Mysterious, gossipy, or playful server oracle.
+- Do NOT repeat the secret itself. React to the drama level or consequences.
+- No quotation marks, no preamble.`;
+
+    const aiLine = await callAiWithFallback(
+      prompt,
+      "You are the Keeper of Secrets for ATX.",
+    );
+
+    const fallbackReactions = [
+      "The walls of this server have ears, and this secret just shook them.",
+      "A confession of this caliber belongs in the classified archives.",
+      "The telemetry on this drama is off the charts.",
+    ];
+
+    const commentary =
+      aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() ||
+      fallbackReactions[Math.floor(Math.random() * fallbackReactions.length)];
+
+    const randCode = Math.floor(1000 + Math.random() * 9000);
+
+    const secretEmbed = new EmbedBuilder()
+      .setColor(0x2b2d31)
+      .setAuthor({
+        name: "ATX CLASSIFIED ARCHIVE • ANONYMOUS TRANSMISSION",
+        iconURL: client.user?.displayAvatarURL(),
+      })
+      .setTitle("🤫 Intercepted Confession")
+      .setDescription(
+        [
+          `### 📁 Declassified Transcript`,
+          `> *" ${secretText} "*`,
+          ``,
+          `### 🔮 The Oracle's Whisper`,
+          `> *" ${commentary} "*`,
+          ``,
+          `> 🕵️ **Source:** \`Operative #${randCode} (Redacted)\``,
+          `> 🔒 **Encryption:** \`256-Bit Quantum Zero-Knowledge\``,
+          ``,
+          `- # *Identity permanently scrubbed from server logs*`,
+        ].join("\n"),
+      )
+      .setFooter({ text: "Confession Bureau • Speak Your Truth" })
+      .setTimestamp();
+
+    await channel.send({ embeds: [secretEmbed] });
+    return reply(
+      "🤫 *Your confession has been scrubbed and dispatched anonymously to the channel.*",
+    );
   }
 
   // 7. MINI-GAMES LAUNCHER
@@ -2641,10 +2250,10 @@ Rules:
     return reply(`🛑 Mini-game halted. The answer was **\`${cur.answer}\`**.`);
   }
 
-  // 8. GENERAL & STAFF
+  // 8. GENERAL & INTRODUCE
   if (commandName === "rules") {
     const embed = new EmbedBuilder()
-      .setColor(0x00f3ff) // Cyberpunk Neon Cyan
+      .setColor(0x00f3ff)
       .setAuthor({
         name: "ATX SERVER RULES",
         iconURL: client.user?.displayAvatarURL(),
@@ -2678,19 +2287,53 @@ Rules:
           `-# *Failure to comply may trigger warnings, mutes, kicks, or permanent expulsion.*`,
         ].join("\n"),
       )
-      .setFooter({
-        text: "Server Rules • ATX Family",
-      });
+      .setFooter({ text: "Server Rules • ATX Family" });
+
+    return reply({ embeds: [embed] });
+  }
+
+  if (commandName === "introduce" || commandName === "about") {
+    const embed = new EmbedBuilder()
+      .setColor(0xffd700)
+      .setAuthor({
+        name: "ATX CENTRAL HEADQUARTERS • CLASSIFIED DOSSIER",
+        iconURL: client.user?.displayAvatarURL(),
+      })
+      .setTitle("🏛️ Welcome to the ATX Family")
+      .setDescription(
+        [
+          `We are a premier gaming collective and competitive syndicate competing across Plato arenas, high-stakes tournaments, and exclusive community events.`,
+          ``,
+          `### 🌐 Ecosystem Pillars`,
+          `> 💎 **Live Weekly Auctions**`,
+          `> *Leverage your accumulated EP tokens to claim rare collectibles, custom badges, and exclusive prizes.*`,
+          ``,
+          `> ⚔️ **Competitive Battlegrounds**`,
+          `> *Engage in round-the-clock Plato skirmishes, daily trivia challenges, and leaderboards.*`,
+          ``,
+          `> 🚀 **Official Web Operations**`,
+          `> *Synchronize your account, inspect leaderboards, and manage your assets via the [**ATX Command Center**](https://atx-family.onrender.com/).*`,
+          ``,
+          `---`,
+          `### 🔰 Getting Started`,
+          `> 📜 Check our directives via \`/rules\``,
+          `> 🎁 Claim starting rewards & track rank via \`/profile\``,
+          `> 🎯 Challenge your squad in Plato & climb the hierarchy`,
+          ``,
+          `- # *Enter with honor. Play to conquer. Long live ATX.*`,
+        ].join("\n"),
+      )
+      .setFooter({ text: "ATX Family • Established Brotherhood" })
+      .setTimestamp();
 
     return reply({ embeds: [embed] });
   }
 
   if (commandName === "welcome") {
     const target = targetUser || author;
-    const isSelf = target.id === author.id;
 
     const welcomeEmbed = new EmbedBuilder()
-      .setColor(0x00f3ff) // Cyberpunk Neon Cyan
+      .setColor(0x00f3ff)
       .setAuthor({
         name: "ATX RECEPTION",
         iconURL: client.user?.displayAvatarURL(),
@@ -2708,9 +2351,7 @@ Rules:
           ``,
         ].join("\n"),
       )
-      .setFooter({
-        text: "ATX Reception • Enter with Honor, Play to Conquer",
-      });
+      .setFooter({ text: "ATX Reception • Enter with Honor, Play to Conquer" });
 
     return reply({ content: `🎉 ${target}`, embeds: [welcomeEmbed] });
   }
@@ -2731,32 +2372,6 @@ Rules:
       `🚨 Report logged against **${target.username}** for executive staff review.`,
     );
   }
-
-  // if (commandName === "cdmod")
-  //   return reply(
-  //     "🛡️ **ATX Moderators:** Chat enforcement & community integrity.",
-  //   );
-  // if (commandName === "cdadm")
-  //   return reply(
-  //     "⚡ **ATX Administrators:** Executive operations & auction management.",
-  //   );
-  // if (commandName === "cdev")
-  //   return reply(
-  //     "💻 **ATX Developers:** Architects of the ATX Platform & AI Systems.",
-  //   );
-  // if (commandName === "cdown")
-  //   return reply("👑 **ATX Owners:** Leadership of the ATX Plato Community.");
-
-  // if (commandName === "purge") {
-  //   if (!isStaff) return reply("⛔ Only staff can use this command.");
-  //   const count = numberInput || parseInt(args[0]);
-  //   if (!count || count < 1 || count > 100)
-  //     return reply("Specify a number from 1 to 100: `/purge count:10`");
-  //   await channel.bulkDelete(count, true);
-  //   const notice = await channel.send(`🧹 Cleaned up **${count}** messages.`);
-  //   setTimeout(() => notice.delete().catch(() => {}), 3000);
-  //   return;
-  // }
 }
 
 // ==========================================
@@ -2771,13 +2386,10 @@ client.once(Events.ClientReady, () => {
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // 1. Immediately defer to prevent the 3-second timeout crash (Error 10062)
-  // Ephemeral for secret messages; standard for everything else
   const isSecret = interaction.commandName === "secret";
   await interaction.deferReply({ ephemeral: isSecret }).catch(() => {});
 
   const targetUser = interaction.options.getUser("target");
-
   const timeOption = interaction.options.getString("time");
   const reminderOption = interaction.options.getString("reminder");
 
@@ -2807,7 +2419,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     targetUser,
     textInput,
     numberInput,
-    // Unified reply handler: edit deferred reply if interaction, or send followUp
     reply: async (payload) => {
       try {
         if (typeof payload === "string") {
@@ -2815,7 +2426,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         return await interaction.editReply(payload);
       } catch (err) {
-        // Fallback in case interaction token expired or failed
         if (typeof payload === "string") {
           return await interaction
             .followUp({ content: payload })
@@ -2887,9 +2497,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
-  // Prefix commands check
   if (!content.startsWith("!")) {
-    // Check if bot was mentioned directly
     if (message.mentions.has(client.user.id)) {
       const prompt = content
         .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
@@ -2930,4 +2538,5 @@ client.on(Events.MessageCreate, async (message) => {
   });
 });
 
-client.login(process.env.DISCORD_BOT_TOKEN);
+const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
+client.login(botToken);
