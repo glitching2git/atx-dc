@@ -99,17 +99,156 @@ const activeGames = new Map(); // channelId -> { type, answer, round, timer }
 const GAME_TIMEOUT_MS = 2 * 60 * 1000;
 
 const EMOJIS = {
-  atx: "⚔️",
-  bid: "🪙",
+  atx: "<:atx:1369956242159833122>",
+  bid: "<a:moneyCoinRich:1571854790420598824>",
   auction: "🏛️",
-  timer: "⏱️",
-  love: "💖",
-  alert: "🚨",
-  trophy: "🏆",
-  sparkles: "✨",
+  timer: "<a:timer10sec:1571867206512287814>",
+  love: "<a:flyingHeartLove:1571805533206216704>",
+  alert: "<a:warningAlert:1571926598804971740>",
+  trophy: "<a:trophyWinner:1571920809709277235>",
+  sparkles: "<a:sparklesstars:1571929733770383521>",
   terminal: "💻",
   shield: "🛡️",
 };
+
+// ==========================================
+// DYNAMIC APPLICATION EMOJI REGISTRY & INJECTOR
+// ==========================================
+let appEmojisCache = [];
+
+async function loadAppEmojis() {
+  try {
+    if (client.application) {
+      const fetched = await client.application.emojis.fetch();
+      appEmojisCache = Array.from(fetched.values());
+      console.log(
+        `[EMOJIS] Synchronized ${appEmojisCache.length} Application Emojis from Developer Portal.`,
+      );
+    }
+  } catch (err) {
+    console.warn("[EMOJIS] Failed to load application emojis:", err.message);
+  }
+}
+
+function getAppEmoji(keywords = [], fallback = "") {
+  if (!appEmojisCache || appEmojisCache.length === 0) return fallback;
+  const kwList = Array.isArray(keywords) ? keywords : [keywords];
+  const matched = appEmojisCache.filter((e) =>
+    kwList.some((kw) => e.name.toLowerCase().includes(kw.toLowerCase())),
+  );
+
+  if (matched.length > 0) {
+    const picked = matched[Math.floor(Math.random() * matched.length)];
+    return picked.toString();
+  }
+  return fallback;
+}
+
+// Natural human-like emoji mixer for in-between sentence breaks
+function injectThemeEmojis(text, theme = "general") {
+  if (!text) return "";
+
+  const themeKeywords = {
+    roast: [
+      "roast",
+      "fire",
+      "burn",
+      "skull",
+      "laugh",
+      "dead",
+      "lol",
+      "rip",
+      "clown",
+    ],
+    flirt: [
+      "love",
+      "heart",
+      "kiss",
+      "blush",
+      "wink",
+      "sparkle",
+      "rose",
+      "cute",
+      "eyes",
+    ],
+    simp: ["simp", "cry", "tear", "plead", "soft", "beg", "heart"],
+    delulu: ["delulu", "galaxy", "magic", "unicorn", "star", "clown"],
+    aura: [
+      "aura",
+      "god",
+      "crown",
+      "glow",
+      "lightning",
+      "king",
+      "chad",
+      "queen",
+    ],
+    secret: ["shh", "secret", "ghost", "lock", "detective", "eyes", "whisper"],
+    expose: [
+      "siren",
+      "alarming",
+      "clown",
+      "police",
+      "warning",
+      "caught",
+      "expose",
+    ],
+    wish: ["blessing", "star", "sparkle", "crown", "gem", "angel", "gold"],
+    general: ["atx", "cool", "chat", "bot", "game", "sparkle"],
+  };
+
+  const keywords = themeKeywords[theme] || themeKeywords.general;
+  const matched = (appEmojisCache || []).filter((e) =>
+    keywords.some((kw) => e.name.toLowerCase().includes(kw.toLowerCase())),
+  );
+
+  if (matched.length === 0) return text.trim();
+
+  // Draw 2 to 3 distinct custom emojis
+  const picked = [];
+  const shuffled = [...matched].sort(() => 0.5 - Math.random());
+  for (const em of shuffled) {
+    if (picked.length >= 3) break;
+    picked.push(em.toString());
+  }
+
+  let clean = text.trim();
+  const pauseRegex =
+    /(,\s+|\s+—\s+|\s+-\s+|\.\.\.\s+|\s+(?:but|and|or|though|yet)\s+)/i;
+  const sentenceEndRegex = /(\.|\!|\?)\s+/;
+
+  // Insert first emoji at natural speech pause (comma, dash, conjunction)
+  const pauseMatch = clean.match(pauseRegex);
+  if (pauseMatch && pauseMatch.index && picked.length > 0) {
+    const e1 = picked.shift();
+    const splitIndex = pauseMatch.index + pauseMatch[0].length;
+    clean = `${clean.slice(0, splitIndex).trimEnd()} ${e1} ${clean.slice(splitIndex).trimStart()}`;
+  }
+
+  // Insert second emoji at sentence break or midpoint
+  const sentenceMatch = clean.match(sentenceEndRegex);
+  if (sentenceMatch && sentenceMatch.index && picked.length > 0) {
+    const e2 = picked.shift();
+    const splitIndex = sentenceMatch.index + sentenceMatch[0].length;
+    clean = `${clean.slice(0, splitIndex).trimEnd()} ${e2} ${clean.slice(splitIndex).trimStart()}`;
+  } else if (picked.length > 0) {
+    const words = clean.split(/\s+/);
+    if (words.length > 6) {
+      const e2 = picked.shift();
+      const insertIdx = Math.floor(words.length * 0.65);
+      words.splice(insertIdx, 0, e2);
+      clean = words.join(" ");
+    }
+  }
+
+  // Final expressive punctuation emoji
+  if (picked.length > 0) {
+    const lastEmoji = picked.shift();
+    clean = `${clean.trimEnd()} ${lastEmoji}`;
+  }
+
+  return clean;
+}
 
 // ==========================================
 // DB HELPERS
@@ -778,97 +917,108 @@ function getHelpPages(userAvatar) {
   return [
     new EmbedBuilder()
       .setColor(0x00f3ff)
-      .setTitle(`${EMOJIS.atx} Welcome to the ATX Discord AI`)
-      .setDescription(
-        [
-          `All commands work with both **\`/\`** (Slash) and **\`!\`** (Prefix).`,
-          ``,
-          `### 🛰️ Module Breakdown`,
-          `> **🤖 • AI Intelligence**`,
-          `> **🎮 • Continuous Games**`,
-          `> **🎭 • Social & Fun**`,
-          `> **🎂 • Profiles & Privacy**`,
-          ``,
-          `-# Login to [**Our Website**](https://atx-family.onrender.com/)`,
-        ].join("\n"),
+      .setTitle(
+        `<:announcement:1571850123615404162> Welcome to the ATX Discord AI`,
       )
-      .setFooter({ text: "Page 1 of 5 • ATX", iconURL: safeAvatar }),
-
-    new EmbedBuilder()
-      .setColor(0x00d2ff)
-      .setTitle(`🤖 AI Interaction Commands`)
       .setDescription(
         [
-          `> \`/ai <prompt>\` or \`!ai\``,
-          `> \`/eli5 <topic>\` or \`!eli5\``,
-          `> \`/summary <time>\` or \`!summary\``,
-          `> \`/translate <text>\` or \`!translate\``,
-          `> \`/counter <statement>\` or \`!counter\``,
-          `> \`/factcheck <claim>\` or \`!factcheck\``,
-          `> \`/remind <time> <reminder>\` or \`!remind\``,
-        ].join("\n"),
-      )
-      .setFooter({ text: "Page 2 of 5 • AI & Utilities", iconURL: safeAvatar }),
-
-    new EmbedBuilder()
-      .setColor(0xffd700)
-      .setTitle(`🎮 Mini-Games & EP`)
-      .setDescription(
-        [
-          `> \`/quiz\` or \`!quiz\``,
-          `> \`/fasttype\` or \`!fasttype\``,
-          `> \`/emojigame\` or \`!emojigame\``,
-          `> \`/unscramble\` or \`!unscramble\``,
-          `> \`/stopgame\` or \`!stopgame\``,
+          `All commands work with both **\`/\`** (Slash) and **\`!\`** (Prefix)`,
           ``,
-          `**Reward:** Each successful answer grants **\` +50 EP \`**!`,
-        ].join("\n"),
-      )
-      .setFooter({ text: "Page 3 of 5 • Mini-Games", iconURL: safeAvatar }),
-
-    new EmbedBuilder()
-      .setColor(0xff007f)
-      .setTitle(`🎭 Social Meters, Banter & Fun`)
-      .setDescription(
-        [
-          `> \`/joke\` or \`!joke\``,
-          `> \`/excuse [target]\` or \`!excuse\``,
-          `> \`/simp [target]\` or \`!simp\``,
-          `> \`/wish [target]\` or \`!wish\``,
-          `> \`/aura [target]\` or \`!aura\``,
-          `> \`/truthdare\` or \`!truthdare\``,
-          `> \`/tossacoin\` or \`!tossacoin\``,
-          `> \`/roast [target]\` or \`!roast\``,
-          `> \`/crush [target]\` or \`!crush\``,
-          `> \`/flirt [target]\` or \`!flirt\``,
-          `> \`/delulu [target]\` or \`!delulu\``,
-          `> \`/expose [target]\` or \`!expose\``,
-          `> \`/lovemeter <target>\` or \`!lovemeter\``,
+          `### **• AI Intelligence <a:botAI:1571833293802967081>**`,
+          `### **• Continuous Games <a:kuromiLoveChase:1571805445629411429>**`,
+          `### **• Social & Fun <a:socialFunFireLaugh:1571834298573529248>**`,
+          `### **• Profiles & Privacy <a:fizzarollidance:1571836252255166524>**`,
+          ``,
+          ``,
+          `-# Login to [**Our Website**](https://atx-family.onrender.com/) <a:flameflicker:1571805360145047622>`,
         ].join("\n"),
       )
       .setFooter({
-        text: "Page 4 of 5 • Social & Banter",
-        iconURL: safeAvatar,
+        text: "Page 1 of 5 • ATX",
+      }),
+
+    new EmbedBuilder()
+      .setColor(0x00d2ff)
+      .setTitle(`<a:botAI:1571833293802967081> AI Interaction Commands`)
+      .setDescription(
+        [
+          `### \`/ai <prompt>\` or \`!ai\``,
+          `### \`/eli5 <topic>\` or \`!eli5\``,
+          `### \`/summary <time>\` or \`!summary\``,
+          `### \`/translate <text>\` or \`!translate\``,
+          `### \`/counter <statement>\` or \`!counter\``,
+          `### \`/factcheck <claim>\` or \`!factcheck\``,
+          `### \`/remind <time> <reminder>\` or \`!remind\``,
+        ].join("\n"),
+      )
+      .setFooter({
+        text: `Page 2 of 5 • AI & Utilities`,
+      }),
+
+    new EmbedBuilder()
+      .setColor(0xffd700)
+      .setTitle(`<a:kuromiLoveChase:1571805445629411429> Mini-Games & EP`)
+      .setDescription(
+        [
+          `### \`/quiz\` or \`!quiz\``,
+          `### \`/fasttype\` or \`!fasttype\``,
+          `### \`/emojigame\` or \`!emojigame\``,
+          `### \`/unscramble\` or \`!unscramble\``,
+          `### \`/stopgame\` or \`!stopgame\``,
+          ``,
+          `**<:moneyPaisaPurse:1571805482392227870> Reward:** Each successful answer grants **\` +50 EP \`**`,
+        ].join("\n"),
+      )
+      .setFooter({
+        text: `Page 3 of 5 • Mini-Games`,
+      }),
+
+    new EmbedBuilder()
+      .setColor(0xff007f)
+      .setTitle(
+        `<a:socialFunFireLaugh:1571834298573529248> Social Meters, Banter & Fun`,
+      )
+      .setDescription(
+        [
+          `### \`/joke\` or \`!joke\``,
+          `### \`/simp [target]\` or \`!simp\``,
+          `### \`/wish [target]\` or \`!wish\``,
+          `### \`/aura [target]\` or \`!aura\``,
+          `### \`/tossacoin\` or \`!tossacoin\``,
+          `### \`/truthdare\` or \`!truthdare\``,
+          `### \`/crush [target]\` or \`!crush\``,
+          `### \`/flirt [target]\` or \`!flirt\``,
+          `### \`/roast [target]\` or \`!roast\``,
+          `### \`/excuse [target]\` or \`!excuse\``,
+          `### \`/delulu [target]\` or \`!delulu\``,
+          `### \`/expose [target]\` or \`!expose\``,
+          `### \`/lovemeter <target>\` or \`!lovemeter\``,
+        ].join("\n"),
+      )
+      .setFooter({
+        text: `Page 4 of 5 • Social & Banter`,
       }),
 
     new EmbedBuilder()
       .setColor(0x7928ca)
-      .setTitle(`🎂 Identity, Privacy & Staff Center`)
+      .setTitle(
+        `<a:verifiedBadgeApproved:1571805350925967360> Identity, Privacy & Staff Center`,
+      )
       .setDescription(
         [
-          `### 👤 Identity & Privacy`,
-          `> \`/balance\` or \`!balance\``,
-          `> \`/introduce\` or \`!introduce\``,
-          `> \`/profile [target]\` or \`!profile\``,
-          `> \`/welcome [target]\` or \`!welcome\``,
-          `> \`/birthday [target]\` or \`!birthday\``,
-          `> \`/setbirthday <DD/MM>\` or \`!setbirthday\``,
-          `> \`/secret <message>\` or \`!secret\``,
-          `> \`/report [target] [reason]\` or \`!report @user reason\``,
-          ``,
+          `### \`/balance\` or \`!balance\``,
+          `### \`/introduce\` or \`!introduce\``,
+          `### \`/profile [target]\` or \`!profile\``,
+          `### \`/welcome [target]\` or \`!welcome\``,
+          `### \`/birthday [target]\` or \`!birthday\``,
+          `### \`/setbirthday <DD/MM>\` or \`!setbirthday\``,
+          `### \`/secret <message>\` or \`!secret\``,
+          `### \`/report [target] [reason]\` or \`!report @user reason\``,
         ].join("\n"),
       )
-      .setFooter({ text: "Page 5 of 5 • Profile", iconURL: safeAvatar }),
+      .setFooter({
+        text: `Page 5 of 5 • Profile`,
+      }),
   ];
 }
 
@@ -922,6 +1072,8 @@ async function executeCommand({
       components: [getRow(currentPage)],
       fetchReply: true,
     });
+
+    if (!helpMsg) return;
 
     const collector = helpMsg.createMessageComponentCollector({
       componentType: ComponentType.Button,
@@ -1001,17 +1153,17 @@ async function executeCommand({
       .setDescription(
         [
           ``,
-          `> Rank Status: **${profile.isStaff ? "🛡️ Staff" : "😎 Member"}**`,
+          `> Rank Status: **${profile.isStaff ? "<a:crownBossKingQueen:1571805552303018024> Staff" : "<:memberapprovedids:1571852902295937134> Member"}**`,
           ``,
-          `**Level ${level} Progress** \`[${progressBar}]\` *(${progressXP * 2}%)*`,
+          `**<:levelRank:1571856992887382016> Level ${level} Progress: ** \` ${progressBar} \` *(${progressXP * 2}%)*`,
           `─────────────────────────────────`,
-          `💰 **Bot EP Balance:** \` ${(profile.botBalance || 0).toLocaleString()} EP \``,
-          `💬 **Messages Dispatched:** \` ${msgCount.toLocaleString()} \``,
-          `🤖 **AI Interactions:** \` ${(profile.chatStats?.aiPromptsCount || 0).toLocaleString()} \``,
-          `🎮 **Mini-Games Played:** \` ${(profile.gameStats?.totalGamesPlayed || 0).toLocaleString()} \``,
-          `🎂 **Birthday Record:** \` ${profile.metadata?.birthday || "Not set"} \``,
+          `### <a:moneybagcoin:1571920822694715492> **EP Balance:** \` ${(profile.botBalance || 0).toLocaleString()} EP \``,
+          `### <a:redenvelopeMessage:1571854787610148954> **Messages Dispatched:** \` ${msgCount.toLocaleString()} \``,
+          `### <a:botAI:1571833293802967081> **AI Interactions:** \` ${(profile.chatStats?.aiPromptsCount || 0).toLocaleString()} \``,
+          `### <a:kuromiLoveChase:1571805445629411429> **Mini-Games Played:** \` ${(profile.gameStats?.totalGamesPlayed || 0).toLocaleString()} \``,
+          `### <:birthdaycake:1571854782170140693> **Birthday Record:** \` ${profile.metadata?.birthday || "Not set"} \``,
           `─────────────────────────────────`,
-          `-# Tip: Participate in **Mini Games** to earn +50 EP every round.`,
+          `-# <a:tipsfedora:1571856989775073350> Tip: Participate in **Mini Games** to earn +50 EP every round`,
         ].join("\n"),
       )
       .setFooter({
@@ -1026,7 +1178,9 @@ async function executeCommand({
   if (commandName === "ai") {
     const prompt = textInput || args.join(" ").trim();
     if (!prompt)
-      return reply("Need assistance? Provide a prompt or explore `/help`!");
+      return reply(
+        "<:helpAssist:1571833290879402004> Need assistance? Provide a prompt or explore `/help`!",
+      );
 
     const replyText = await callAiWithFallback(
       prompt,
@@ -1046,9 +1200,10 @@ async function executeCommand({
       true,
     );
 
+    const enriched = injectThemeEmojis(replyText, "general");
     const final =
-      replyText ||
-      "😭 **Sollyyy...** AI link momentarily offline. Please re-engage shortly!\n\n-# You can play Mini Games on our **website**, see you there 🥳";
+      enriched ||
+      "<:auraloss:1571805296769110056> **Sollyyy...** AI is momentarily offline. Please re-engage shortly! <:closed1left:1571861006043316254><:closed2right:1571861003610624072>\n\n-# Play Mini Games on our **website**, see you there <:heartholographic:1571805493456805968>";
 
     await DiscordUser.updateOne(
       { discordId: author.id },
@@ -1081,7 +1236,7 @@ async function executeCommand({
 
       if (recentMessages.length < 4) {
         return reply(
-          `📡 *Radar is clear — not enough chat activity in the last ${hours} hour(s) to form a debrief.*`,
+          `**Not enough chat activity in the last ${hours} hour(s) to form a debrief**\n<:dead:1571805340809302066><:dead:1571805340809302066><:dead:1571805340809302066><:dead:1571805340809302066><:dead:1571805340809302066><:dead:1571805340809302066><:dead:1571805340809302066>`,
         );
       }
 
@@ -1092,13 +1247,13 @@ async function executeCommand({
         `Summarize the chat activity from the past ${hours} hours into a crisp, engaging server debrief.`,
         ``,
         `Include these exact sections:`,
-        `### 🛰️ The Narrative`,
+        `### <a:redenvelopeMessage:1571854787610148954> The Narrative`,
         `(2-3 concise sentences capturing key conversations, themes, and community vibe)`,
         ``,
-        `### ⚔️ Highlights & Banter`,
+        `### <a:fizzarollidance:1571836252255166524> Highlights & Banter`,
         `(3-4 clear bullet points: main topics, games played, jokes, debates, or announcements)`,
         ``,
-        `### 👑 Active Members`,
+        `### <:maincharacter:1571805299126575184> Active Members`,
         `(List the most active participants in bold)`,
         ``,
         `CHAT TRANSCRIPT:`,
@@ -1109,13 +1264,15 @@ async function executeCommand({
 
       if (!debrief) {
         return reply(
-          "😭 **Sollyyy...** Could not compile server summary at this moment. Please try again shortly!",
+          "<:auraloss:1571805296769110056> **Sollyyy...** Could not compile server summary at this moment. Please try again shortly!",
         );
       }
 
       const summaryEmbed = new EmbedBuilder()
         .setColor(0x00f3ff)
-        .setTitle(`🛰️ Summary • Past ${hours} Hours`)
+        .setTitle(
+          `<a:announcement2:1571861016306782298> Summary • Past ${hours} Hours`,
+        )
         .setDescription(
           debrief.length > 4000 ? debrief.slice(0, 3990) + "..." : debrief,
         )
@@ -1126,7 +1283,7 @@ async function executeCommand({
     } catch (err) {
       console.error("[SUMMARISE ERROR]", err);
       return reply(
-        "😭 **Sollyyy...** Encountered an internal error while fetching channel history!",
+        "<:auraloss:1571805296769110056> **Sollyyy...** Encountered an internal error while fetching channel history!",
       );
     }
   }
@@ -1192,16 +1349,16 @@ async function executeCommand({
         name: "COUNTER • LOGICAL REBUTTAL",
         iconURL: client.user?.displayAvatarURL(),
       })
-      .setTitle("Tactical Counter-Argument")
+      .setTitle("<:okaySoo:1571805366885548063> Tactical Counter-Argument")
       .setDescription(
         [
-          `### 🗣️ Opposing Statement`,
+          `### <a:announcement2:1571861016306782298> Opposing Statement`,
           `> *" ${stmt.length > 250 ? stmt.slice(0, 247) + "..." : stmt} "*`,
           ``,
-          `### 🛡️ Debunk & Refutation`,
+          `### <:booksPilesReading:1571805371146965062> Debunk & Refutation`,
           `> ${rebuttalText}`,
           ``,
-          `-# Argued on behalf of: **${author}**`,
+          `-# Argued on behalf of: **${author}** <a:tipsfedora:1571856989775073350>`,
         ].join("\n"),
       )
       .setFooter({ text: "Use !help for more commands" });
@@ -1215,14 +1372,14 @@ async function executeCommand({
 
     if (!timeArg || !reminderText) {
       return reply(
-        "Usage:\n> Prefix: `!remind 5m plato tournament`\n> Slash: `/remind time:5m reminder:plato tournament`",
+        "<a:botAI:1571833293802967081><a:fightAngryMad:1571805560771190875> Usage:\n> Prefix: `!remind 5m plato tournament`\n> Slash: `/remind time:5m reminder:plato tournament`",
       );
     }
 
     const match = timeArg.match(/^(\d+)([smh])$/i);
     if (!match) {
       return reply(
-        "😭 **Eeee...** Invalid duration format! Use `10s` (seconds), `5m` (minutes), or `2h` (hours).",
+        "### **Eeee... <:goAwayDeny:1571805495713341491> <a:fightAngryMad:1571805560771190875> Invalid duration format!**\n-# Use `10s` (seconds), `5m` (minutes), or `2h` (hours).",
       );
     }
 
@@ -1235,7 +1392,7 @@ async function executeCommand({
 
     if (ms <= 0 || ms > 2147483647) {
       return reply(
-        "😭 Reminder duration must be between 1 second and 24 days.",
+        "**Reminder duration must be between 1 second and 24 days**\n<:22168donotbullyids:1571852913708498955><:22168donotbullyids:1571852913708498955><:22168donotbullyids:1571852913708498955>",
       );
     }
 
@@ -1247,19 +1404,19 @@ async function executeCommand({
       })
       .setDescription(
         [
-          `### ⏰ Reminder Initialized!`,
+          `### Reminder Initialized! <a:timer10sec:1571867206512287814>`,
           `> **Task:** "${reminderText}"`,
-          `> **Alarm In:** **${amount}${unit}**`,
+          `> **Alarm In:** **${amount}${unit}** <a:pixelclockalarm:1571867210018852875>`,
         ].join("\n"),
       )
-      .setFooter({ text: "Type !help for more commands ● ATX Services" });
+      .setFooter({ text: "Use !help for more commands ● ATX Services" });
 
     await reply({ embeds: [scheduledEmbed] });
 
     setTimeout(async () => {
       const alarmEmbed = new EmbedBuilder()
         .setColor(0xffd700)
-        .setTitle("🔔 Alarm Triggered!")
+        .setTitle("<a:pixelclockalarm:1571867210018852875> Alarm Triggered!")
         .setDescription(
           [
             `Hey ${author}, your scheduled reminder is up:`,
@@ -1277,7 +1434,7 @@ async function executeCommand({
     return;
   }
 
-  // 5. SOCIAL METERS & BANTER
+  // 5. SOCIAL METERS & BANTER (CLEAN EMBEDS + HIGH-VISIBILITY EMOJI HEADERS)
   if (commandName === "roast" || commandName === "flirt") {
     const target = targetUser || author;
     const isSelf = target.id === author.id;
@@ -1322,6 +1479,7 @@ Reference their real life struggles, being single forever, gaming skill issues, 
         : `${targetName}, you're the kind of distraction that makes losing an entire win streak feel worth it.`);
 
     const isRoast = commandName === "roast";
+    const mixedLine = injectThemeEmojis(cleaned, isRoast ? "roast" : "flirt");
 
     const embed = new EmbedBuilder()
       .setColor(isRoast ? 0xff3b30 : 0xff2d55)
@@ -1329,7 +1487,14 @@ Reference their real life struggles, being single forever, gaming skill issues, 
         name: isRoast ? "ATX SAVAGE ROAST 🔥" : "ATX HIGH-TIER RIZZ 💘",
         iconURL: client.user?.displayAvatarURL(),
       })
-      .setDescription([`> **${cleaned}**`].join("\n"))
+      .setDescription(
+        [
+          `### ${isRoast ? "<a:peperoastedpepe:1571870778633224433><a:peperoastedpepe:1571870778633224433><a:peperoastedpepe:1571870778633224433><a:peperoastedpepe:1571870778633224433><a:peperoastedpepe:1571870778633224433><a:peperoastedpepe:1571870778633224433>" : "<a:emolgawinkCharmLove:1571871530932117564> <a:emolgawinkCharmLove:1571871530932117564> <a:emolgawinkCharmLove:1571871530932117564> <a:emolgawinkCharmLove:1571871530932117564> <a:emolgawinkCharmLove:1571871530932117564> <a:emolgawinkCharmLove:1571871530932117564>"}`,
+          ``,
+          `> **${mixedLine}**`,
+          ``,
+        ].join("\n"),
+      )
       .setFooter({
         text: isRoast
           ? "React funny at it • No Hard Feelings"
@@ -1343,13 +1508,13 @@ Reference their real life struggles, being single forever, gaming skill issues, 
     const target = targetUser;
     if (!target) {
       return reply(
-        "Mention someone to test your compatibility! Use `/lovemeter target:@user` or `!lovemeter @user`",
+        "## <:shutupSilentZipped:1571805467670347796> <:vdayheartsingle4ever:1571887866806673469> Mention someone to test your compatibility!\n-# <:31967goodideaids:1571852911535857724> Use ` /lovemeter target:@user `",
       );
     }
 
     if (target.id === author.id) {
       return reply(
-        "Self-love is important, but pick another member to test real chemistry! 😉",
+        "### <:mostHated:1571805386904698980> <:cutie:1571805401194823730> Self-love is important, but pick another member to test real chemistry! <:cutenote_YoullBeOk:1571805377761255505>",
       );
     }
 
@@ -1362,16 +1527,21 @@ Reference their real life struggles, being single forever, gaming skill issues, 
     }
     const percent = Math.abs(hash) % 101;
 
+    const loveHeart = "<:redheartwithavelvetbow:1571894452375650314>";
+    const emptyHeart = "<:heartempty:1571892707389866064>";
+
     const filledHearts = Math.round(percent / 10);
     const emptyHearts = 10 - filledHearts;
-    const progressBar = "💖".repeat(filledHearts) + "🖤".repeat(emptyHearts);
+    const progressBar =
+      loveHeart.repeat(filledHearts) + emptyHeart.repeat(emptyHearts);
 
     let color = 0xff2d55;
     let statusTitle = "";
     let fallbackVerdict = "";
 
     if (percent >= 90) {
-      statusTitle = "💍 Soulmates Destined By Fate";
+      statusTitle =
+        "<a:diamondRingEngaged:1571805539636355204> Soulmates Destined By Fate";
       fallbackVerdict =
         "Absolute peak compatibility! Start planning the wedding and locking in duo queues.";
       color = 0xff007f;
@@ -1411,6 +1581,11 @@ Rules:
 
     const verdict =
       aiRes?.replace(/^["'\s]+|["'\s]+$/g, "").trim() || fallbackVerdict;
+    const mixedVerdict = injectThemeEmojis(verdict, "flirt");
+    const prominentLove = getAppEmoji(
+      ["heart", "love"],
+      "<a:sparklyheartCute:1571805531058733107>",
+    );
 
     const loveEmbed = new EmbedBuilder()
       .setColor(color)
@@ -1420,19 +1595,22 @@ Rules:
       })
       .setDescription(
         [
-          `### **${author.username}**  ×  **${target.username}**`,
+          `### ${prominentLove} **${author.username}** ${prominentLove} **${target.username}** ${prominentLove}`,
           ``,
-          `# Compatibility: \` ${percent}% \` `,
-          `${progressBar}`,
+          `### Compatibility: \` ${percent}% \``,
+          `## ${progressBar}`,
           ``,
-          `### 🔮 Oracle Verdict`,
-          `> *${verdict}*`,
+          `### <:fortuneteller:1571897563781664929> Oracle Verdict`,
+          `> **${mixedVerdict}**`,
           ``,
         ].join("\n"),
       )
       .setFooter({ text: "Love Meter • Scores refresh every 24 hours" });
 
-    return reply({ content: `${author} 💕 ${target}`, embeds: [loveEmbed] });
+    return reply({
+      content: `${author} <a:revolvingheartslove:1571892692114341888> ${target}`,
+      embeds: [loveEmbed],
+    });
   }
 
   if (["simp", "delulu", "aura"].includes(commandName)) {
@@ -1452,7 +1630,9 @@ Rules:
     if (commandName === "simp") {
       const score = positiveHash % 101;
       const filled = Math.round(score / 10);
-      const bar = "🥺".repeat(filled) + "🖤".repeat(10 - filled);
+      const simpIcon = "<:excitedSimp:1571902783785803796>";
+      const emptyIcon = "<:emptySadLow:1571902778165563433>";
+      const bar = simpIcon.repeat(filled) + emptyIcon.repeat(10 - filled);
 
       let statusTitle = "";
       let color = 0xff758f;
@@ -1489,6 +1669,7 @@ Rules: Speak directly about them. Sarcastic, funny, no quotes, no intros.`;
       );
       const punchline =
         aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() || defaultPunchline;
+      const mixedPunchline = injectThemeEmojis(punchline, "simp");
 
       embed
         .setColor(color)
@@ -1498,13 +1679,12 @@ Rules: Speak directly about them. Sarcastic, funny, no quotes, no intros.`;
         })
         .setDescription(
           [
+            `## ||${statusTitle}||`,
+            `### <a:reverserolllove:1571900422753619989> Simp Rating: \` ${score}% \``,
+            `## ${bar}`,
             ``,
-            `# Simp Rating: \` ${score}% \` `,
-            `> ${bar}`,
-            `### ||${statusTitle}||`,
-            ``,
-            `### 🔬 Behavioral Diagnosis`,
-            `> **${punchline}**`,
+            `### <a:searchingbunfood:1571900427346382858> Behavioral Diagnosis`,
+            `> **${mixedPunchline}**`,
             ``,
           ].join("\n"),
         )
@@ -1517,7 +1697,9 @@ Rules: Speak directly about them. Sarcastic, funny, no quotes, no intros.`;
       const score = positiveHash % 101;
       const solulu = 100 - score;
       const filled = Math.round(score / 10);
-      const bar = "🦄".repeat(filled) + "🧠".repeat(10 - filled);
+      const deluluIcon = "<a:halloweenpumpkinandbatDelulu:1571905899671457893>";
+      const brainIcon = "<a:bookMagic:1571905895296663572>";
+      const bar = deluluIcon.repeat(filled) + brainIcon.repeat(10 - filled);
 
       let statusTitle = "";
       let color = 0xa855f7;
@@ -1554,6 +1736,8 @@ Tone: Internet culture humor. No quotes, no intro.`;
       );
       const punchline =
         aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() || defaultPunchline;
+      const mixedPunchline = injectThemeEmojis(punchline, "delulu");
+      const headerEmoji = getAppEmoji(["unicorn", "magic"], "🦄");
 
       embed
         .setColor(color)
@@ -1563,14 +1747,13 @@ Tone: Internet culture humor. No quotes, no intro.`;
         })
         .setDescription(
           [
-            ``,
-            `# Delulu Level: \` ${score}% \` `,
-            `> ${bar}`,
+            `## ||${statusTitle}||`,
+            `### <:delulu:1571905882239934474> Delulu Level: \` ${score}% \``,
+            `## ${bar}`,
             `> Solulu Level (Realism): **\` ${solulu}% \`**`,
-            `### ||${statusTitle}||`,
             ``,
-            `### 🔮 Reality Distortion`,
-            `> **${punchline}**`,
+            `### <a:magicbook:1571905888640442398> Reality Distortion`,
+            `> **${mixedPunchline}**`,
             ``,
           ].join("\n"),
         )
@@ -1589,27 +1772,30 @@ Tone: Internet culture humor. No quotes, no intro.`;
       let bar = "";
       let defaultPunchline = "";
 
+      const sparkle = "<:crownKingBoss:1571805491124764733>";
+      const skull = getAppEmoji(["skull"], "<:deadSkull:1571908653966041308>");
+
       if (auraPoints >= 50000) {
         statusTitle = "👑 Transcendent Divine Aura (+MAX)";
         color = 0xffd700;
-        bar = "✨✨✨✨✨✨✨✨✨✨";
+        bar = sparkle.repeat(10);
         defaultPunchline =
           "Enters the voice channel and everyone instinctively sits up straight.";
       } else if (auraPoints > 0) {
         statusTitle = "⚡ High Roller / Main Character Aura";
         color = 0x00f3ff;
-        bar = "⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡";
+        bar = bolt.repeat(10);
         defaultPunchline = "Walks away from explosions without looking back.";
       } else if (auraPoints > -50000) {
         statusTitle = "📉 Stumbling / Minor Aura Deficit";
         color = 0xf97316;
-        bar = "💀💀💀💀💀⬛⬛⬛⬛⬛";
+        bar = skull.repeat(5) + "⬛".repeat(5);
         defaultPunchline =
           "Waved back at someone who was actually waving at the person behind them.";
       } else {
         statusTitle = "🕳️ Black Hole Debt / Negative Infinite Aura";
         color = 0xef4444;
-        bar = "💀💀💀💀💀💀💀💀💀💀";
+        bar = skull.repeat(10);
         defaultPunchline =
           "Tripped on a flat surface and apologized to the pavement.";
       }
@@ -1628,6 +1814,8 @@ Tone: Modern gamer and internet slang. No quotes, no intro.`;
       );
       const punchline =
         aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() || defaultPunchline;
+      const mixedPunchline = injectThemeEmojis(punchline, "aura");
+      const headerEmoji = "<a:crownBossKingQueen:1571805552303018024>";
 
       embed
         .setColor(color)
@@ -1637,12 +1825,12 @@ Tone: Modern gamer and internet slang. No quotes, no intro.`;
         })
         .setDescription(
           [
-            `# \` ${formattedAura} \` Aura Points`,
-            `> ${bar}`,
             `### ||${statusTitle}||`,
+            `### <a:electricityBoltLightening:1571908670571413544> \` ${formattedAura} \` Aura Points ${headerEmoji}`,
+            `## ${bar}`,
             ``,
-            `### 📡 Aura Incident Report`,
-            `> **${punchline}**`,
+            `### <:announcement:1571850123615404162> Aura Incident Report`,
+            `> **${mixedPunchline}**`,
             ``,
           ].join("\n"),
         )
@@ -1669,71 +1857,98 @@ Tone: Modern gamer and internet slang. No quotes, no intro.`;
     let embed = new EmbedBuilder();
 
     if (commandName === "crush") {
-      let candidateNames = [];
-      if (guild && guild.members?.cache?.size > 0) {
-        candidateNames = guild.members.cache
-          .filter((m) => !m.user.bot && m.id !== target.id)
-          .map((m) => m.displayName || m.user.username);
-      }
-
-      const celebrityCrushes = [
-        "Chris Evans",
-        "Michael B. Jordan",
-        "Timothée Chalamet",
-        "Pedro Pascal",
-        "Henry Cavill",
-        "Tom Hiddleston",
-        "Zendaya",
-        "Margot Robbie",
-        "Ana de Armas",
-        "Florence Pugh",
-        "Tom Holland",
-        "Cillian Murphy",
-        "Sydney Sweeney",
-        "Dua Lipa",
-        "Sabrina Carpenter",
-        "Kiara Advani",
-        "Triptii Dimri",
-        "Rashmika Mandanna",
-        "Mrunal Thakur",
-        "Disha Patani",
-        "Samantha Ruth Prabhu",
-        "Virat Kohli",
-        "Shubman Gill",
-        "Smriti Mandhana",
-        "Hrithik Roshan",
-        "Ranbir Kapoor",
-        "Charles Leclerc",
-        "Jenna Ortega",
-        "Kartik Aaryan",
-        "Alia Bhatt",
+      // 1. Dynamic Domain & Anchor Shuffling to force variety
+      const domains = [
+        "Current Gen-Z viral meme personality or internet icon",
+        "Popular Indian Stand-up Comedian (e.g., Zakir Khan, Samay Raina, Bassi, Harsh Gujral, etc.)",
+        "International Pop Icon or Singer (e.g., Dua Lipa, Sabrina Carpenter, Billie Eilish, The Weeknd, Diljit)",
+        "Top Indian or International Cricketer / Footballer / Athlete (e.g., Rohit Sharma, Smriti Mandhana, Hardik Pandya, Haaland, Leclerc)",
+        "Gaming youtuber",
+        "Footballer",
+        "Bollywood or South Indian Cinema Star (e.g., Triptii Dimri, Rashmika, Kartik Aaryan, Vijay Deverakonda, Mrunal Thakur)",
+        "Hollywood Actor or Actress (e.g., Pedro Pascal, Cillian Murphy, Sydney Sweeney, Florence Pugh, Timothée Chalamet)",
+        "Famous Esports",
+        "Stand-up Comedian",
+        "Cricketer",
+        "Famous Esports / Gaming Streamer or YouTuber (e.g., Speed, Kai Cenat, Mortal, Scout)",
       ];
 
-      let chosenCrush = "";
-      if (candidateNames.length >= 3 && randIndex % 2 === 0) {
-        chosenCrush = candidateNames[randIndex % candidateNames.length];
-      } else {
-        chosenCrush = celebrityCrushes[randIndex % celebrityCrushes.length];
-      }
+      const selectedDomain =
+        domains[Math.floor(Math.random() * domains.length)];
+      const randomSeed = Math.floor(Math.random() * 100000);
 
-      const prompt = `Write a hilarious, spicy, and flirtatious gossip punchline revealing that ${target.username} has a massive, desperate crush on "${chosenCrush}".
+      let chosenCrush = "Diljit Dosanjh";
+      let chosenPunchline = "";
+
+      const prompt = `Session Nonce: #${randomSeed}
+Task:
+1. Pick ONE distinct, recognizable person strictly from this category: "${selectedDomain}".
+CRITICAL: Do NOT pick Zendaya, Virat Kohli, or Shubman Gill. Pick someone fresh, unexpected, and iconic.
+2. Write a hilarious, spicy, and flirtatious gossip punchline revealing that ${target.username} has a massive, desperate secret crush on them.
+
 Rules:
 - Length: Strictly 1 or 2 punchy sentences.
-- Tone: Teasing, witty, and dramatic like a high-energy group chat leak.
-- Output strictly the punchline text. No quotes, no intro.`;
+- Tone: Teasing, witty, and dramatic like an authentic group chat leak.
+- Output Format: Return ONLY raw, valid JSON without markdown wrapping or preamble:
+{"crush": "Exact Name", "punchline": "Punchline text here"}`;
 
-      const aiLine = await callAiWithFallback(
+      const aiResponse = await callAiWithFallback(
         prompt,
-        "You are the server's sharpest gossip comic.",
+        "You are the server's sharpest gossip comic. Output strictly valid JSON.",
       );
-      const fallbackCrushLines = [
-        `Caught rehearsing wedding vows in the mirror every night before opening their DMs.`,
-        `Was seen refreshing ${chosenCrush}'s status every 4 minutes hoping for a miracle reply.`,
-        `Secretly bookmarked all their photos and claims they're just 'studying camera angles'.`,
-      ];
-      const punchline =
-        aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() ||
-        fallbackCrushLines[randIndex % fallbackCrushLines.length];
+
+      if (aiResponse) {
+        try {
+          const cleaned = aiResponse.replace(/```json|```/gi, "").trim();
+          const parsed = JSON.parse(cleaned);
+          if (parsed.crush && parsed.punchline) {
+            chosenCrush = parsed.crush.trim();
+            chosenPunchline = parsed.punchline.trim();
+          }
+        } catch (e) {}
+      }
+
+      // Expansive Fallback Pool (over 30 diverse personalities)
+      if (!chosenPunchline) {
+        const fallbackPool = [
+          "Diljit Dosanjh",
+          "Samay Raina",
+          "Triptii Dimri",
+          "Pedro Pascal",
+          "Smriti Mandhana",
+          "Charles Leclerc",
+          "Sabrina Carpenter",
+          "Hardik Pandya",
+          "Mrunal Thakur",
+          "Cillian Murphy",
+          "Zakir Khan",
+          "Sydney Sweeney",
+          "Speed",
+          "Rashmika Mandanna",
+          "The Weeknd",
+          "Anya Taylor-Joy",
+          "Rohit Sharma",
+          "Florence Pugh",
+          "Kartik Aaryan",
+          "Dua Lipa",
+        ];
+        chosenCrush =
+          fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+
+        const fallbackCrushLines = [
+          `Caught rehearsing wedding vows in the mirror every night before checking their updates.`,
+          `Was seen refreshing ${chosenCrush}'s feed every 4 minutes hoping for a miracle DM.`,
+          `Secretly bookmarked all their clips and insists they are just 'studying camera angles'.`,
+          `Claims they only follow ${chosenCrush} for the 'interview intellect' while sweating profusely.`,
+        ];
+        chosenPunchline =
+          fallbackCrushLines[
+            Math.floor(Math.random() * fallbackCrushLines.length)
+          ];
+      }
+
+      const mixedPunchline = injectThemeEmojis(chosenPunchline, "flirt");
+      const headerEmoji = getAppEmoji(["heart", "flirt", "love"], "💌");
 
       embed
         .setColor(0xff007f)
@@ -1743,12 +1958,12 @@ Rules:
         })
         .setDescription(
           [
-            `### 💌 Secret Crush: **||${chosenCrush}||**`,
+            `### ${headerEmoji} Secret Crush: **|| ${chosenCrush} ||**`,
             ``,
-            `> *${punchline}*`,
+            `> **${mixedPunchline}**`,
             ``,
-            `> 🔍 **Obsession Level:** \` ${(randIndex % 45) + 55}% \``,
-            `> 🤫 **Source:** \` Unfiltered Gossips \``,
+            `### <a:RatingMeterLevel:1571918521116524564> **Obsession Level:** \` ${(randIndex % 65) + 35}% \``,
+            `### <a:megaphoneSourceAnnouncement:1571920802775961660> **Source:** \` Unfiltered Gossips \``,
             ``,
             `-# **Gossip telemetry recalculates daily at midnight**`,
           ].join("\n"),
@@ -1805,6 +2020,8 @@ Rules:
       const punchline =
         aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() ||
         fallbackFails[hourIndex % fallbackFails.length];
+      const mixedPunchline = injectThemeEmojis(punchline, "expose");
+      const headerEmoji = getAppEmoji(["siren"], "🚨");
 
       embed
         .setColor(0xff3300)
@@ -1814,10 +2031,10 @@ Rules:
         })
         .setDescription(
           [
-            `### Exposing: **${target.username}**`,
+            `### ${headerEmoji} Exposing: **${target.username}**`,
             ``,
-            `### 📁 Declassified Verdict`,
-            `> *${punchline}*`,
+            `### <a:announcmentAlert:1571926579708170270> Declassified Verdict`,
+            `> **${mixedPunchline}**`,
             ``,
           ].join("\n"),
         )
@@ -1886,6 +2103,9 @@ Rules:
         fallbackWishes[hourIndex % fallbackWishes.length];
     }
 
+    const mixedWish = injectThemeEmojis(finalWish, "wish");
+    const headerEmoji = getAppEmoji(["blessing", "sparkle", "star"], "✨");
+
     const wishEmbed = new EmbedBuilder()
       .setColor(0xffd700)
       .setAuthor({
@@ -1894,10 +2114,8 @@ Rules:
       })
       .setDescription(
         [
-          `### **${target.username}**`,
-          ``,
-          `### 📜 Inscribed Blessing ✨`,
-          `> **${finalWish}**`,
+          `### ${headerEmoji} **${target.username}** Inscribed Blessing <a:penguwritingscript:1571932288869081168>`,
+          `> **${mixedWish}**`,
           ``,
         ].join("\n"),
       )
@@ -1908,14 +2126,36 @@ Rules:
 
   if (commandName === "joke") {
     const jokeAngles = [
-      "Plato Ocho games where someone hoards +4 cards only to choke at the end",
-      "toxic 1v1 Pool matches where a player scratches on the 8-ball",
-      "blaming 999ms ping, phantom touch, and phone battery for clean losses",
-      "Discord gamers who stay active 20 hours a day but miss one alarm in real life",
-      "spending all your bot EP tokens on weekly auctions and ending up broke",
-      "saying 'one last game and I sleep' at 3:00 AM on a weekday",
-      "acting like an esports champion in a casual party mobile game",
-      "rage-quitting a match and claiming the server disconnected",
+      "Dad Jokes",
+      "One-Liners",
+      "Knock-Knock Jokes",
+      "Puns & Wordplay",
+      "Tech & Programming",
+      "Office & Corporate Life",
+      "School & Student Life",
+      "Marriage & Relationships",
+      "Parenting & Kids",
+      "Animals & Pets",
+      "Food & Cooking",
+      "Doctors & Hospitals",
+      "Lawyers & Courtroom",
+      "Travel & Airplanes",
+      "Sports & Fitness",
+      "Science & Math",
+      "History & Politics",
+      "Movies & Pop Culture",
+      "Superheroes & Comics",
+      "Holidays & Festivals",
+      "Weather & Seasons",
+      "Money & Banking",
+      "Dating & Singles",
+      "Aging & Seniors",
+      "Traffic & Driving",
+      "Shopping & Sales",
+      "Music & Musicians",
+      "Space & Aliens",
+      "Ghosts & Spooky",
+      "Sarcasm & Dry Humor",
     ];
     const randomAngle =
       jokeAngles[Math.floor(Math.random() * jokeAngles.length)];
@@ -1945,6 +2185,7 @@ Rules:
     const cleanJoke =
       aiJoke?.replace(/^["'\s]+|["'\s]+$/g, "").trim() ||
       offlineJokes[Math.floor(Math.random() * offlineJokes.length)];
+    const mixedJoke = injectThemeEmojis(cleanJoke, "roast");
 
     const jokeEmbed = new EmbedBuilder()
       .setColor(0xffcc00)
@@ -1952,7 +2193,7 @@ Rules:
         name: "ATX STANDUP",
         iconURL: client.user?.displayAvatarURL(),
       })
-      .setDescription([`> **${cleanJoke}**`, ``].join("\n"))
+      .setDescription([`**${mixedJoke}**`, ``].join("\n"))
       .setFooter({ text: "🎭 100% Organic Banter • Try /joke for more" });
 
     return reply({ embeds: [jokeEmbed] });
@@ -1970,9 +2211,10 @@ Rules:
         iconURL: client.user?.displayAvatarURL(),
       })
       .setDescription(
-        [`> The coin landed decisively on **${result.toUpperCase()}**`].join(
-          "\n",
-        ),
+        [
+          `### <a:fliptossdragcoin:1571936724924239964> Decisive Outcome <a:fliptossdragcoin:1571936724924239964>`,
+          `> The coin landed decisively on **${result.toUpperCase()}**`,
+        ].join("\n"),
       )
       .setFooter({ text: "Provably Fair 50/50" });
 
@@ -2037,6 +2279,15 @@ Rules:
         ? fallbackTruths[Math.floor(Math.random() * fallbackTruths.length)]
         : fallbackDares[Math.floor(Math.random() * fallbackDares.length)]);
 
+    const mixedLine = injectThemeEmojis(
+      cleanLine,
+      isTruth ? "general" : "expose",
+    );
+    const headerEmoji = getAppEmoji(
+      isTruth ? ["brain", "smart"] : ["fire", "burn"],
+      isTruth ? "🤔" : "🔥",
+    );
+
     const embed = new EmbedBuilder()
       .setColor(isTruth ? 0x00f3ff : 0xff0055)
       .setAuthor({
@@ -2045,12 +2296,12 @@ Rules:
       })
       .setDescription(
         [
-          `### ${target.username}: ${isTruth ? "Moment of Truth 🤔" : "Dare Undertaking 🔥"}`,
-          `> **${cleanLine}**`,
+          `### ${headerEmoji} ${target}: ${isTruth ? "Moment of Truth" : "Dare Undertaking"}`,
+          `> **${mixedLine}**`,
           ``,
-          `> ⚖️ **Penalty:** \` Permanent Reputational Damage \``,
+          `> <:redcardpenalty:1571939410977620059> **Penalty:** \` Permanent Reputational Damage \``,
           ``,
-          `-# **Refusal is an automatic admission of FEAR 🎭**`,
+          `-# **Refusal is an automatic admission of FEAR <a:panickednofear:1571940651417997342>**`,
         ].join("\n"),
       )
       .setFooter({ text: `Lie or Die` });
@@ -2096,6 +2347,8 @@ Rules:
     const cleanExcuse =
       aiExcuse?.replace(/^["'\s]+|["'\s]+$/g, "").trim() ||
       fallbackExcuses[Math.floor(Math.random() * fallbackExcuses.length)];
+    const mixedExcuse = injectThemeEmojis(cleanExcuse, "expose");
+    const headerEmoji = getAppEmoji(["skull", "rip", "low"], "🤦‍♂️");
 
     const excuseEmbed = new EmbedBuilder()
       .setColor(0xff9500)
@@ -2104,7 +2357,11 @@ Rules:
         iconURL: client.user?.displayAvatarURL(),
       })
       .setDescription(
-        [`${target} be like...\n`, `> **${cleanExcuse}**`, `\n`].join("\n"),
+        [
+          `### ${headerEmoji} ${target} be like:`,
+          `> **"${mixedExcuse}"**`,
+          ``,
+        ].join("\n"),
       )
       .setFooter({ text: "It was purely a skill issue 🎭" });
 
@@ -2120,15 +2377,15 @@ Rules:
     const bdayEmbed = new EmbedBuilder()
       .setColor(bdayRaw ? 0xffa500 : 0x8e8e93)
       .setAuthor({
-        name: "🎉🎂 ATX BIRTHDAYS",
+        name: "🎉 ATX BIRTHDAYS",
         iconURL: client.user?.displayAvatarURL(),
       })
       .setDescription(
         bdayRaw
-          ? `## 🎂 ${target}'s Birthday:  \` ${bdayRaw} \``
-          : `### 🎂 ${target}'s Birthday: *Not set yet* \n(Use  \` /setbirthday date:DD/MM \`)`,
+          ? `## <:birthdaycake:1571854782170140693> ${target}'s Birthday:  \` ${bdayRaw} \``
+          : `### <:birthdaycake:1571854782170140693> ${target}'s Birthday: *Not set yet* \n(Use  \` /setbirthday date:DD/MM \`)`,
       )
-      .setFooter({ text: `Type /help for more commands` });
+      .setFooter({ text: `Use /help for more commands` });
 
     return reply({ embeds: [bdayEmbed] });
   }
@@ -2139,7 +2396,7 @@ Rules:
     const match = dateInput.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
     if (!match) {
       return reply(
-        "⚠️ Please provide a valid date in `DD/MM` format (e.g., `/setbirthday date:15/08` or `!setbirthday 15/08`).",
+        "### <a:warningAlert:1571926598804971740> Please provide a valid date in `DD/MM` \n-# Format (e.g., `/setbirthday date:15/08` or `!setbirthday 15/08`).",
       );
     }
 
@@ -2149,7 +2406,7 @@ Rules:
     const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]) {
       return reply(
-        `⚠️ \` ${dateInput} \` is not a valid calendar date! Please verify the day and month.`,
+        `### <a:alertWarning:1571926677934575816> \`${dateInput}\` is not a valid calendar date! Please verify the day and month.`,
       );
     }
 
@@ -2168,73 +2425,10 @@ Rules:
         iconURL: client.user?.displayAvatarURL(),
       })
       .setDescription(
-        `> 🎂 Your birthday has been recorded as **\` ${formattedDate} \`**`,
+        `> <:birthdaycake:1571854782170140693> Your birthday has been recorded as **\` ${formattedDate} \`**`,
       );
 
     return reply({ embeds: [embed] });
-  }
-
-  if (commandName === "secret") {
-    const secretText = textInput || args.join(" ").trim();
-    if (!secretText)
-      return reply(
-        "Usage: `/secret message:your secret confession` or `!secret <message>`",
-      );
-
-    if (deleteOriginal) await deleteOriginal().catch(() => {});
-
-    const prompt = `A member anonymously confessed this in a Discord server: "${secretText}".
-Rules:
-- Formulate strictly ONE short, entertaining, and witty reaction/commentary (1-2 sentences maximum).
-- Tone: Mysterious, gossipy, or playful server oracle.
-- Do NOT repeat the secret itself. React to the drama level or consequences.
-- No quotation marks, no preamble.`;
-
-    const aiLine = await callAiWithFallback(
-      prompt,
-      "You are the Keeper of Secrets for ATX.",
-    );
-
-    const fallbackReactions = [
-      "The walls of this server have ears, and this secret just shook them.",
-      "A confession of this caliber belongs in the classified archives.",
-      "The telemetry on this drama is off the charts.",
-    ];
-
-    const commentary =
-      aiLine?.replace(/^["'\s]+|["'\s]+$/g, "").trim() ||
-      fallbackReactions[Math.floor(Math.random() * fallbackReactions.length)];
-
-    const randCode = Math.floor(1000 + Math.random() * 9000);
-
-    const secretEmbed = new EmbedBuilder()
-      .setColor(0x2b2d31)
-      .setAuthor({
-        name: "ATX CLASSIFIED ARCHIVE • ANONYMOUS TRANSMISSION",
-        iconURL: client.user?.displayAvatarURL(),
-      })
-      .setTitle("🤫 Intercepted Confession")
-      .setDescription(
-        [
-          `### 📁 Declassified Transcript`,
-          `> *" ${secretText} "*`,
-          ``,
-          `### 🔮 The Oracle's Whisper`,
-          `> *" ${commentary} "*`,
-          ``,
-          `> 🕵️ **Source:** \`Operative #${randCode} (Redacted)\``,
-          `> 🔒 **Encryption:** \`256-Bit Quantum Zero-Knowledge\``,
-          ``,
-          `- # *Identity permanently scrubbed from server logs*`,
-        ].join("\n"),
-      )
-      .setFooter({ text: "Confession Bureau • Speak Your Truth" })
-      .setTimestamp();
-
-    await channel.send({ embeds: [secretEmbed] });
-    return reply(
-      "🤫 *Your confession has been scrubbed and dispatched anonymously to the channel.*",
-    );
   }
 
   // 7. MINI-GAMES LAUNCHER
@@ -2269,69 +2463,32 @@ Rules:
         [
           `Welcome to the **ATX Family**. To maintain an elite, respectful, and safe community, all members must adhere strictly to these core rules:`,
           ``,
-          `### 1. Mutual Respect & Decency 🌟`,
+          `### <:numberOne1:1571805438532657193> Mutual Respect & Decency <a:sparklesstarsunsolar:1571929761557647592>`,
           `> Treat every member with dignity. **Zero tolerance** for harassment, toxicity, abuse, slurs, or hate speech across text and voice channels.`,
           ``,
-          `### 2. Anti-Spam & Chat Hygiene 🚫`,
+          `### <:numberTwo2:1571805436028653601> Anti-Spam & Chat Hygiene 🚫`,
           `> Keep channels clean and readable. Avoid message flooding, rapid emote spam, wall-of-text copy-pastes, or disruptive mentions.`,
           ``,
-          `### 3. Strictly No NSFW Material 🔞`,
+          `### <:numberThree3:1571805433532780646> Strictly No NSFW Material 🔞`,
           `> Uploading, linking, or discussing adult, explicit, suggestive, or inappropriate content results in an **immediate and permanent ban**.`,
           ``,
-          `### 4. Suspicious Links & Safety ⚠️`,
+          `### <:numberFour4:1571805431503003689> Suspicious Links & Safety <a:warningAlert:1571926598804971740>`,
           `> Do not share unverified downloads, phishing portals, scam links, or malicious files. Automated link monitoring is strictly enforced.`,
           ``,
-          `### 5. Advertising & Self-Promotion 📢`,
+          `### <:numberFive5:1571805455804670052> Advertising & Self-Promotion <a:announcement2:1571861016306782298>`,
           `> Unauthorized promotion of other Discord servers, group chats, personal products, or commercial ventures is prohibited without admin approval.`,
           ``,
-          `### 6. DM Etiquette & Privacy 🛡️`,
+          `### <:numberSix6:1571805524368818276> DM Etiquette & Privacy <:blessings:1571929736203206777>`,
           `> Unsolicited DMs, predatory outreach, or harassing members in private messages will lead to an immediate server blacklist.`,
           ``,
           `-------`,
-          `### Need to Report an Incident? 🚨`,
+          `### Need to Report an Incident? <:sirenPolice:1571926589795598346>`,
           `> Use \` /report target:@user reason:<details> \` or [**Report Anonymously**](https://atx-family.onrender.com/contact/) straight to the admins`,
           ``,
-          `-# *Failure to comply may trigger warnings, mutes, kicks, or permanent expulsion.*`,
+          `-# *Failure to comply may trigger warnings, mutes, kicks, or permanent ban.*`,
         ].join("\n"),
       )
       .setFooter({ text: "Server Rules • ATX Family" });
-
-    return reply({ embeds: [embed] });
-  }
-
-  if (commandName === "introduce" || commandName === "about") {
-    const embed = new EmbedBuilder()
-      .setColor(0xffd700)
-      .setAuthor({
-        name: "ATX CENTRAL HEADQUARTERS • CLASSIFIED DOSSIER",
-        iconURL: client.user?.displayAvatarURL(),
-      })
-      .setTitle("🏛️ Welcome to the ATX Family")
-      .setDescription(
-        [
-          `We are a premier gaming collective and competitive syndicate competing across Plato arenas, high-stakes tournaments, and exclusive community events.`,
-          ``,
-          `### 🌐 Ecosystem Pillars`,
-          `> 💎 **Live Weekly Auctions**`,
-          `> *Leverage your accumulated EP tokens to claim rare collectibles, custom badges, and exclusive prizes.*`,
-          ``,
-          `> ⚔️ **Competitive Battlegrounds**`,
-          `> *Engage in round-the-clock Plato skirmishes, daily trivia challenges, and leaderboards.*`,
-          ``,
-          `> 🚀 **Official Web Operations**`,
-          `> *Synchronize your account, inspect leaderboards, and manage your assets via the [**ATX Command Center**](https://atx-family.onrender.com/).*`,
-          ``,
-          `---`,
-          `### 🔰 Getting Started`,
-          `> 📜 Check our directives via \`/rules\``,
-          `> 🎁 Claim starting rewards & track rank via \`/profile\``,
-          `> 🎯 Challenge your squad in Plato & climb the hierarchy`,
-          ``,
-          `- # *Enter with honor. Play to conquer. Long live ATX.*`,
-        ].join("\n"),
-      )
-      .setFooter({ text: "ATX Family • Established Brotherhood" })
-      .setTimestamp();
 
     return reply({ embeds: [embed] });
   }
@@ -2349,25 +2506,30 @@ Rules:
         [
           `Yooo! **${target.username}** has successfully joined the **ATX Family**`,
           ``,
-          `> 📜 **Mandatory Briefing:** Review server laws with \` /rules \``,
-          `> 💎 **Web Operations:** Login yourself on the [**Official Portal**](https://atx-family.onrender.com/)`,
-          `> 💻 **Bot Commands:** Use \` /help \` to see all commands`,
+          `> <a:bookMagic:1571905895296663572> **Mandatory Briefing:** Review server laws with \` /rules \``,
+          `> <a:diamondgem:1571920814041858149> **Web Operations:** Login yourself on the [**Official Portal**](https://atx-family.onrender.com/)`,
+          `> <a:botAI:1571833293802967081> **Bot Commands:** Use \` /help \` to see all commands`,
           ``,
           `------`,
-          `-# 💬 **Introduce yourself in chat, squad up for Plato battles, and make yourself at home!**`,
+          `-# <a:redenvelopeMessage:1571854787610148954> **Introduce yourself in chat, squad up for Plato battles, and make yourself at home!**`,
           ``,
         ].join("\n"),
       )
       .setFooter({ text: "ATX Reception • Enter with Honor, Play to Conquer" });
 
-    return reply({ content: `🎉 ${target}`, embeds: [welcomeEmbed] });
+    return reply({
+      content: `<:welcome:1571805398615330816> ${target} <:cuteWelcome:1571805395930845235>`,
+      embeds: [welcomeEmbed],
+    });
   }
 
   if (commandName === "report") {
     const target = targetUser;
     const reason = textInput || args.slice(1).join(" ");
     if (!target || !reason)
-      return reply("Usage: `/report target:@user reason:<reason>`");
+      return reply(
+        "<a:warningAlert:1571926598804971740> Usage: `/report target:@user reason:<reason>`",
+      );
     await logActivity({
       author,
       channel,
@@ -2376,7 +2538,7 @@ Rules:
       details: { reportedUser: target.id, reason },
     });
     return reply(
-      `🚨 Report logged against **${target.username}** for executive staff review.`,
+      `<a:redandbluesiren:1571926585769201725> Report logged against **${target.username}** for executive staff review.`,
     );
   }
 }
@@ -2384,9 +2546,12 @@ Rules:
 // ==========================================
 // EVENT LISTENERS
 // ==========================================
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
   console.log(`[DISCORD] ATX Bot is live and connected as ${client.user.tag}`);
-  client.user.setActivity("ATX Discord Server 24/7 ⚔️", { type: 3 });
+  client.user.setActivity("ATX Discord Server ⚔️ 24/7", { type: 3 });
+
+  // Load application emojis uploaded via Developer Portal
+  await loadAppEmojis();
 });
 
 // Slash Command Handler
@@ -2459,7 +2624,7 @@ client.on(Events.MessageCreate, async (message) => {
       clearTimeout(currentGame.timer);
       activeGames.delete(message.channel.id);
       return message.reply(
-        `🛑 Mini-game session halted. The answer was **\`${currentGame.answer}\`**.`,
+        `<:stopHalt:1571805410753773628> Mini-game session halted. The answer was **\`${currentGame.answer}\`**.`,
       );
     }
 
@@ -2489,10 +2654,10 @@ client.on(Events.MessageCreate, async (message) => {
 
       await message.reply(
         [
-          `🎉 **${message.author}** got it right!`,
-          `💰 **+50 Bot EP** credited! New Balance: **${(updatedUser?.botBalance || 0).toLocaleString()} EP** ${EMOJIS.bid}`,
+          `<a:sparklesstars:1571929733770383521> **${message.author}** got it right! <a:redcheckCorrect:1571861014184468631>`,
+          `<a:moneybagcoin:1571920822694715492> **+50 Bot EP** credited! New Balance: **${(updatedUser?.botBalance || 0).toLocaleString()} EP** ${EMOJIS.bid}`,
           ``,
-          `-# Launching round ${currentRound + 1} in 3 seconds...`,
+          `-# ${EMOJIS.timer} Launching round ${currentRound + 1} in 3 seconds...`,
         ].join("\n"),
       );
 
