@@ -1,11 +1,6 @@
 // deploy-commands.js
 require("dotenv").config();
-const {
-  REST,
-  Routes,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-} = require("discord.js");
+const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
 const commands = [
   // 1. General & Info
@@ -53,6 +48,16 @@ const commands = [
         .setDescription("Date in DD/MM format")
         .setRequired(true),
     ),
+  new SlashCommandBuilder()
+    .setName("secret")
+    .setDescription("Send an anonymous confession to the server archives")
+    .addStringOption((opt) =>
+      opt
+        .setName("message")
+        .setDescription("Your secret confession")
+        .setRequired(true),
+    ),
+
   // 3. AI & Smart Utilities
   new SlashCommandBuilder()
     .setName("ai")
@@ -69,7 +74,6 @@ const commands = [
         .setDescription("Concept to explain")
         .setRequired(true),
     ),
-  // Change from requiring 'text' to optional 'hours'
   new SlashCommandBuilder()
     .setName("summary")
     .setDescription(
@@ -149,13 +153,13 @@ const commands = [
     .setName("crush")
     .setDescription("Uncover a secret crush rumor")
     .addUserOption((opt) =>
-      opt.setName("target").setDescription("Target member").setRequired(true),
+      opt.setName("target").setDescription("Target member").setRequired(false),
     ),
   new SlashCommandBuilder()
     .setName("expose")
     .setDescription("Expose a member's gaming secrets")
     .addUserOption((opt) =>
-      opt.setName("target").setDescription("Target member").setRequired(true),
+      opt.setName("target").setDescription("Target member").setRequired(false),
     ),
   new SlashCommandBuilder()
     .setName("simp")
@@ -235,52 +239,58 @@ const commands = [
     .addStringOption((opt) =>
       opt.setName("reason").setDescription("Reason").setRequired(true),
     ),
-  // new SlashCommandBuilder().setName("cdmod").setDescription("List moderators"),
-  // new SlashCommandBuilder()
-  //   .setName("cdadm")
-  //   .setDescription("List administrators"),
-  // new SlashCommandBuilder()
-  //   .setName("cdev")
-  //   .setDescription("List bot developers"),
-  // new SlashCommandBuilder()
-  //   .setName("cdown")
-  //   .setDescription("List server owners"),
-  // new SlashCommandBuilder()
-  //   .setName("purge")
-  //   .setDescription("Bulk delete messages (Staff only)")
-  //   .addIntegerOption((opt) =>
-  //     opt
-  //       .setName("count")
-  //       .setDescription("Number of messages (1-100)")
-  //       .setMinValue(1)
-  //       .setMaxValue(100)
-  //       .setRequired(true),
-  //   )
-  //   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+
+  // 7. Nitro Mimic Command
+  new SlashCommandBuilder()
+    .setName("nitro")
+    .setDescription(
+      "Send messages with ATX custom emojis even without Discord Nitro!",
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("theme")
+        .setDescription("Select an emoji category (flirt, roast, aura, etc.)")
+        .setAutocomplete(true)
+        .setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("statement")
+        .setDescription("The message you want to send")
+        .setRequired(false),
+    ),
 ].map((c) => c.toJSON());
 
-const rest = new REST({ version: "10" }).setToken(
-  process.env.DISCORD_BOT_TOKEN,
-);
+const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
+const clientId =
+  process.env.CLIENT_ID ||
+  (botToken ? Buffer.from(botToken.split(".")[0], "base64").toString() : null);
+
+const rest = new REST({ version: "10" }).setToken(botToken);
 
 (async () => {
   try {
     console.log(
       `[DEPLOY] Registering ${commands.length} application commands...`,
     );
-    // Routes.applicationCommands registers commands globally across all servers
-    const data = await rest.put(
-      Routes.applicationCommands(
-        process.env.DISCORD_BOT_TOKEN
-          ? Buffer.from(
-              process.env.DISCORD_BOT_TOKEN.split(".")[0],
-              "base64",
-            ).toString()
-          : process.env.CLIENT_ID,
-      ),
-      { body: commands },
+
+    if (process.env.GUILD_ID) {
+      await rest.put(
+        Routes.applicationGuildCommands(clientId, process.env.GUILD_ID),
+        { body: commands },
+      );
+      console.log(
+        `[DEPLOY] Successfully registered commands to test Guild (${process.env.GUILD_ID}).`,
+      );
+    }
+
+    const data = await rest.put(Routes.applicationCommands(clientId), {
+      body: commands,
+    });
+
+    console.log(
+      `[DEPLOY] Successfully registered ${data.length} commands globally.`,
     );
-    console.log(`[DEPLOY] Successfully registered ${data.length} commands.`);
   } catch (error) {
     console.error("[DEPLOY ERROR]:", error);
   }

@@ -14,7 +14,7 @@ const discordActivitySchema = new mongoose.Schema(
       index: true,
       enum: [
         "AI_CHAT_PROMPT",
-        "GAME_SCRAMBLE_WIN",
+        "MINI_GAME_WIN",
         "GAME_DICE_ROLL",
         "GAME_COIN_FLIP",
         "DAILY_CLAIM",
