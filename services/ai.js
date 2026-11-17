@@ -22,29 +22,21 @@ function getAiClient() {
 function rotateKey() {
   if (geminiKeys.length > 1) {
     currentKeyIndex = (currentKeyIndex + 1) % geminiKeys.length;
-    console.log(
-      `[KEY ROTATION] Switched to Gemini Key Index ${currentKeyIndex}`,
-    );
     return true;
   }
   return false;
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Fastest available models first
 const MODEL_CANDIDATES = [
   "gemini-2.5-flash",
   "gemini-3.5-flash-lite",
   "gemini-3.8-flash",
-  "gemini-3.1-pro-preview",
 ];
 
-async function callAiWithFallback(
-  prompt,
-  systemInstruction = "",
-  enableSearch = false,
-) {
+async function callAiWithFallback(prompt, systemInstruction = "") {
   let keyAttempts = 0;
-  const maxKeyAttempts = Math.max(geminiKeys.length, 1);
+  const maxKeyAttempts = Math.min(geminiKeys.length, 2);
 
   while (keyAttempts < maxKeyAttempts) {
     const ai = getAiClient();
@@ -53,24 +45,31 @@ async function callAiWithFallback(
       try {
         const config = {};
         if (systemInstruction) config.systemInstruction = systemInstruction;
-        if (enableSearch) config.tools = [{ googleSearch: {} }];
 
-        const response = await ai.models.generateContent({
+        // Fast race: 3.5s timeout to prevent Discord interaction expiration
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("MODEL_TIMEOUT")), 3500),
+        );
+
+        const apiPromise = ai.models.generateContent({
           model: model,
           contents: prompt,
           config: Object.keys(config).length > 0 ? config : undefined,
         });
 
+        const response = await Promise.race([apiPromise, timeoutPromise]);
+
         if (response && response.text) {
           return response.text.trim();
         }
       } catch (err) {
-        if (err.status === 429 || err.status === 503) {
-          await sleep(500);
+        if (
+          err.status === 429 ||
+          err.status === 503 ||
+          err.message === "MODEL_TIMEOUT"
+        ) {
           continue;
         }
-        if (err.status === 404) continue;
-        console.warn(`[AI Engine] ${model} warning:`, err.message || err);
       }
     }
 

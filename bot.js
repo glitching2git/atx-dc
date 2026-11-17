@@ -18,6 +18,10 @@ const {
 } = require("./services/database");
 const { loadAppEmojis, EMOJIS } = require("./config/emojis");
 const { registerNitroMimic } = require("./nitro-mimic");
+const {
+  trackMemberBehavior,
+  generateRefinedAiResponse,
+} = require("./services/conversationEngine");
 
 // Modular Command Handlers
 const {
@@ -100,7 +104,7 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // Bypassed immediately so nitro-mimic.js manages deferral and reply without collision
+  // Bypassed immediately so nitro-mimic.js manages deferral without collision
   if (interaction.commandName === "nitro") return;
 
   const isSecret = interaction.commandName === "secret";
@@ -157,14 +161,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
   });
 });
 
-// Legacy Prefix Handler & In-Chat Mini-Game Solver
+// Message Handler (Telemetry, Mini-Games, and Targeted Conversational AI)
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
+
+  // Track social affinity and command usage in the background
+  trackMemberBehavior(message).catch(() => {});
 
   const content = message.content.trim();
   const lower = content.toLowerCase();
 
-  // Active game guess checker
+  // Active game guess checker with atomic lock
   if (activeGames.has(message.channel.id)) {
     const currentGame = activeGames.get(message.channel.id);
     if (lower === "!stopgame") {
@@ -175,12 +182,11 @@ client.on(Events.MessageCreate, async (message) => {
       );
     }
 
-    // Normalize: remove punctuation, extra spaces, and optional leading 'the '
     const cleanGuess = lower
       .replace(/[^a-z0-9\s]/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    const cleanTarget = currentGame.answer
+    const cleanTarget = (currentGame.answer || "")
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, "")
       .replace(/\s+/g, " ")
@@ -237,49 +243,77 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
-  // Mention Handler
-  if (!content.startsWith("!")) {
-    if (message.mentions.has(client.user.id)) {
-      const prompt = content
-        .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
-        .trim();
-      return executeCommand({
-        commandName: "ai",
-        author: message.author,
-        member: message.member,
-        channel: message.channel,
-        guild: message.guild,
-        args: [prompt],
-        targetUser: null,
-        textInput: prompt,
-        numberInput: null,
-        client,
-        reply: (payload) => message.reply(payload),
-        deleteOriginal: null,
-      });
+  // 1. Direct reply to one of the bot's messages
+  let isReplyingToBot = false;
+  if (message.reference && message.reference.messageId) {
+    try {
+      const referencedMsg = await message.channel.messages.fetch(
+        message.reference.messageId,
+      );
+      if (referencedMsg && referencedMsg.author.id === client.user.id) {
+        isReplyingToBot = true;
+      }
+    } catch (e) {}
+  }
+
+  // 2. Direct mention of the bot
+  const botMentioned = message.mentions.has(client.user.id);
+
+  // 3. Name check (contains 'atx', 'atx ai', or 'starza')
+  const containsBotName = /\b(atx|atx ai|starza)\b/i.test(content);
+
+  // Conversational response check (Strict: No isContinuingChat)
+  if (
+    !content.startsWith("!") &&
+    (botMentioned || isReplyingToBot || containsBotName)
+  ) {
+    let cleanPrompt = content
+      .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
+      .replace(/\b(atx|atx ai|starza)\b/gi, "")
+      .trim();
+
+    if (!cleanPrompt) {
+      return message.reply(
+        "### Need assistance? <:cutie:1571805401194823730>\nProvide a prompt or explore `/help`! <:help:1572178506941464717>",
+      );
+    }
+
+    await message.channel.sendTyping().catch(() => {});
+
+    try {
+      const response = await generateRefinedAiResponse(message, cleanPrompt);
+      if (response) {
+        return message.reply(
+          response.length > 2000 ? response.slice(0, 1990) + "..." : response,
+        );
+      }
+    } catch (err) {
+      console.error("[CONVERSATION ERROR]:", err.message);
     }
     return;
   }
 
-  // Prefix Command Handler
-  const args = content.slice(1).trim().split(/\s+/);
-  const commandName = args.shift().toLowerCase();
-  const targetUser = message.mentions.users.first() || null;
+  // Legacy Prefix Command Handler (!command)
+  if (content.startsWith("!")) {
+    const args = content.slice(1).trim().split(/\s+/);
+    const commandName = args.shift().toLowerCase();
+    const targetUser = message.mentions.users.first() || null;
 
-  await executeCommand({
-    commandName,
-    author: message.author,
-    member: message.member,
-    channel: message.channel,
-    guild: message.guild,
-    args,
-    targetUser,
-    textInput: args.join(" "),
-    numberInput: parseInt(args[0]) || null,
-    client,
-    reply: (payload) => message.reply(payload),
-    deleteOriginal: () => message.delete().catch(() => {}),
-  });
+    await executeCommand({
+      commandName,
+      author: message.author,
+      member: message.member,
+      channel: message.channel,
+      guild: message.guild,
+      args,
+      targetUser,
+      textInput: args.join(" "),
+      numberInput: parseInt(args[0], 10) || null,
+      client,
+      reply: (payload) => message.reply(payload),
+      deleteOriginal: () => message.delete().catch(() => {}),
+    });
+  }
 });
 
 const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;

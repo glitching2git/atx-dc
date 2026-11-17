@@ -4,10 +4,12 @@ const { callAiWithFallback } = require("../services/ai");
 const { injectThemeEmojis } = require("../config/emojis");
 const { DiscordUser } = require("../services/database");
 
+// Current:
 async function handleUtilityCommands({
   commandName,
   author,
   channel,
+  guild,
   args,
   textInput,
   numberInput,
@@ -20,38 +22,36 @@ async function handleUtilityCommands({
     commandName === "starza"
   ) {
     const prompt = textInput || args.join(" ").trim();
-    if (!prompt)
+    if (!prompt) {
       return reply(
         "<:helpAssist:1571833290879402004> Need assistance? Provide a prompt or explore `/help`!",
       );
+    }
 
-    const replyText = await callAiWithFallback(
-      prompt,
-      [
-        'You are the "ATX Assistant", the refined digital caretaker of "ATX Family" — the premier gaming community on the Plato Fun Multiplayer Games app.',
-        "",
-        "CORE PERSONA & TONE:",
-        "- Maintain a professional, gaming-savvy, polished demeanor with an italicized, formal touch.",
-        "- Jump straight into your answer in sentence one without generic filler.",
-        "",
-        "DIRECTIVE & PROTOCOL RULES:",
-        '1. COMPLAINTS: Direct grievances to "Accelerate" or any server Admin.',
-        "2. WEBSITE & PORTAL: Visit https://atx-family.onrender.com or reach out to server Admins.",
-        "3. BROAD KNOWLEDGE: Provide sharp, accurate answers on sports, current events, weather, technology, gaming meta, and general trivia.",
-        "4. LENGTH & FORMATTING: Keep response concise and under 4-6 sentences using Discord markdown.",
-      ].join("\n"),
-      true,
-    );
+    const {
+      generateRefinedAiResponse,
+    } = require("../services/conversationEngine");
 
-    const enriched = injectThemeEmojis(replyText, "general");
+    // Construct a message-like payload compatible with the engine
+    const contextMessage = {
+      author,
+      guild,
+      channel,
+      client,
+      content: prompt,
+      reference: null,
+    };
+
+    const response = await generateRefinedAiResponse(contextMessage, prompt);
     const final =
-      enriched ||
-      "<:auraloss:1571805296769110056> **Sollyyy...** AI is momentarily offline. Please re-engage shortly! <:closed1left:1571861006043316254><:closed2right:1571861003610624072>\n\n-# Play Mini Games on our **website**, see you there <:heartholographic:1571805493456805968>";
+      response ||
+      "<:auraloss:1571805296769110056> **Sollyyy...** AI is momentarily offline. Please re-engage shortly!\n<:closed1left:1571861006043316254><:closed2right:1571861003610624072>";
 
     await DiscordUser.updateOne(
       { discordId: author.id },
       { $inc: { "chatStats.aiPromptsCount": 1 } },
     );
+
     return reply(final.length > 2000 ? final.slice(0, 1990) + "..." : final);
   }
 

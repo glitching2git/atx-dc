@@ -61,9 +61,14 @@ const commands = [
   // 3. AI & Smart Utilities
   new SlashCommandBuilder()
     .setName("ai")
-    .setDescription("Chat directly with AI")
-    .addStringOption((opt) =>
-      opt.setName("prompt").setDescription("What to ask").setRequired(true),
+    .setDescription(
+      "Ask ATX AI anything with real-time web knowledge and community context",
+    )
+    .addStringOption((option) =>
+      option
+        .setName("prompt")
+        .setDescription("What do you want to ask or talk about?")
+        .setRequired(true),
     ),
   new SlashCommandBuilder()
     .setName("eli5")
