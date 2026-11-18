@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 
 const UserProfileSchema = new mongoose.Schema(
   {
-    userId: { type: String, required: true, unique: true, index: true },
+    userId: { type: String, required: true, index: true },
     guildId: { type: String, required: true, index: true },
     username: { type: String, default: "" },
 

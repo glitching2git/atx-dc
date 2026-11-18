@@ -324,7 +324,7 @@ async function handleIdentityCommands({
           `### <:numberTwo2:1571805436028653601> Anti-Spam & Chat Hygiene 🚫`,
           `> Keep channels clean and readable. Avoid message flooding, rapid emote spam, wall-of-text copy-pastes, or disruptive mentions.`,
           ``,
-          `### <:numberThree3:1571805433532780646> Strictly No NSFW Material 🔞`,
+          `### <:numberThree3:1571805433532780646> Strictly No NSFW Material <:nsfw:1572178514352939048>`,
           `> Uploading, linking, or discussing adult, explicit, suggestive, or inappropriate content results in an **immediate and permanent ban**.`,
           ``,
           `### <:numberFour4:1571805431503003689> Suspicious Links & Safety <a:warningAlert:1571926598804971740>`,
@@ -394,7 +394,7 @@ async function handleIdentityCommands({
       details: { reportedUser: target.id, reason },
     });
     return reply(
-      `<a:redandbluesiren:1571926585769201725> Report logged against **${target.username}** for executive staff review.`,
+      `<a:redandbluesiren:1571926585769201725> **Report** needs some fix, let's talk till then`,
     );
   }
 

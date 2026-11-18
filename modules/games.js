@@ -12,13 +12,13 @@ async function fetchRandomWord(round = 1) {
   let diffPool;
 
   if (round <= 10) {
-    length = Math.floor(Math.random() * 2) + 5;
+    length = Math.floor(Math.random() * 4) + 7;
     diffPool = [1, 2, 3];
   } else if (round <= 25) {
-    length = Math.floor(Math.random() * 2) + 6;
+    length = Math.floor(Math.random() * 4) + 9;
     diffPool = [2, 3, 4];
   } else {
-    length = Math.floor(Math.random() * 2) + 7;
+    length = Math.floor(Math.random() * 3) + 10;
     diffPool = [3, 4, 5];
   }
 
@@ -268,7 +268,9 @@ Strict Rules:
         answer: puzzle.answer,
         embed: new EmbedBuilder()
           .setColor(0xffd700)
-          .setTitle(`🧩 Guess the **${puzzle.category}**`)
+          .setTitle(
+            `🧩 Guess the **${puzzle.category}**\n-# <a:alertWarning:1571926677934575816> **Emoji game is broken, we're fixing it** <a:alertWarning:1571926677934575816>`,
+          )
           .setDescription(
             [
               ``,
@@ -304,17 +306,6 @@ Strict Rules:
               .replace(/[^a-z0-9\s]/g, "")
               .replace(/\s+/g, " ")
               .trim();
-
-            // Scale phrase length based on round
-            const words = cleaned.split(" ");
-            let targetLength = 6; // Rounds 1-5: ~5-6 words
-            if (round > 15)
-              targetLength = 12; // Rounds 16+: ~10-12 words
-            else if (round > 5) targetLength = 8; // Rounds 6-15: ~7-8 words
-
-            if (words.length > targetLength) {
-              cleaned = words.slice(0, targetLength).join(" ");
-            }
 
             if (cleaned.split(" ").length >= 3) {
               phrase = cleaned;

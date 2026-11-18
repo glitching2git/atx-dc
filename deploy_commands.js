@@ -29,7 +29,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName("balance")
-    .setDescription("Check your Bot EP balance"),
+    .setDescription("Check your EP balance"),
   new SlashCommandBuilder()
     .setName("birthday")
     .setDescription("Check someone's birthday")
@@ -50,7 +50,9 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName("secret")
-    .setDescription("Send an anonymous confession to the server archives")
+    .setDescription(
+      "[COMING SOON] Send an anonymous confession to the server archives",
+    )
     .addStringOption((opt) =>
       opt
         .setName("message")
@@ -61,9 +63,7 @@ const commands = [
   // 3. AI & Smart Utilities
   new SlashCommandBuilder()
     .setName("ai")
-    .setDescription(
-      "Ask ATX AI anything with real-time web knowledge and community context",
-    )
+    .setDescription("Ask ATX AI anything within community context")
     .addStringOption((option) =>
       option
         .setName("prompt")
@@ -103,7 +103,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName("translate")
-    .setDescription("Translate text to English & Hindi")
+    .setDescription("Translate text to English")
     .addStringOption((opt) =>
       opt.setName("text").setDescription("Text to translate").setRequired(true),
     ),
@@ -189,10 +189,10 @@ const commands = [
     .setDescription("Get a Truth or Dare challenge"),
   new SlashCommandBuilder()
     .setName("joke")
-    .setDescription("Tell a gaming joke"),
+    .setDescription("Tell a playful joke"),
   new SlashCommandBuilder()
     .setName("excuse")
-    .setDescription("Generate a hilarious gamer excuse")
+    .setDescription("Generate a hilarious excuse")
     .addUserOption((opt) =>
       opt
         .setName("target")
@@ -223,7 +223,7 @@ const commands = [
     .setDescription("Start a continuous word unscramble game"),
   new SlashCommandBuilder()
     .setName("emojigame")
-    .setDescription("Start a continuous guess-the-game challenge"),
+    .setDescription("[NEEDS FIX]:Start a continuous guess-the-game challenge"),
   new SlashCommandBuilder()
     .setName("fasttype")
     .setDescription("Start a continuous speed-typing contest"),
@@ -237,7 +237,7 @@ const commands = [
   // 6. Moderation & Staff
   new SlashCommandBuilder()
     .setName("report")
-    .setDescription("Report a user to staff")
+    .setDescription("[COMING SOON]:Report a user to staff")
     .addUserOption((opt) =>
       opt.setName("target").setDescription("User").setRequired(true),
     )

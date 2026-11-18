@@ -178,7 +178,7 @@ client.on(Events.MessageCreate, async (message) => {
       clearTimeout(currentGame.timer);
       activeGames.delete(message.channel.id);
       return message.reply(
-        `### <:idcDonotCare:1571805403786772500> Mini-game halted.\n-# The answer was **\`${currentGame.answer}\`**.`,
+        `### <:idcDonotCare:1571805403786772500> Mini-game halted\n-# The answer was **\`${currentGame.answer}\`**`,
       );
     }
 
@@ -260,7 +260,8 @@ client.on(Events.MessageCreate, async (message) => {
   const botMentioned = message.mentions.has(client.user.id);
 
   // 3. Name check (contains 'atx', 'atx ai', or 'starza')
-  const containsBotName = /\b(atx|atx ai|starza)\b/i.test(content);
+  const containsBotName =
+    /\b(ai atx|ai starza|starza ai|atx ai|atx|starza)\b/i.test(content);
 
   // Conversational response check (Strict: No isContinuingChat)
   if (
@@ -269,12 +270,12 @@ client.on(Events.MessageCreate, async (message) => {
   ) {
     let cleanPrompt = content
       .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
-      .replace(/\b(atx|atx ai|starza)\b/gi, "")
+      .replace(/\b(ai atx|ai starza|starza ai|atx ai|atx|starza)\b/gi, "")
       .trim();
 
     if (!cleanPrompt) {
       return message.reply(
-        "### Need assistance? <:cutie:1571805401194823730>\nProvide a prompt or explore `/help`! <:help:1572178506941464717>",
+        "### Need assistance? <:cutie:1571805401194823730>\nAsk anything or explore **/help**!",
       );
     }
 

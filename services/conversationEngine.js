@@ -11,19 +11,21 @@ async function trackMemberBehavior(message) {
     const authorId = message.author.id;
     const guildId = message.guild.id;
 
-    let profile = await UserProfile.findOne({ userId: authorId, guildId });
-    if (!profile) {
-      profile = new UserProfile({
-        userId: authorId,
-        guildId,
-        username: message.author.username,
-      });
-    }
+    // Atomically find or create the user profile scoped to THIS guild
+    let profile = await UserProfile.findOneAndUpdate(
+      { userId: authorId, guildId: guildId },
+      {
+        $setOnInsert: { userId: authorId, guildId: guildId },
+        $set: {
+          username: message.author.username,
+          lastActiveAt: new Date(),
+        },
+        $inc: { totalInteractions: 1 },
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
+    );
 
-    profile.totalInteractions = (profile.totalInteractions || 0) + 1;
-    profile.lastActiveAt = new Date();
-    profile.username = message.author.username;
-
+    // Track companion replies within this guild
     if (message.reference?.messageId) {
       try {
         const repliedMsg = await message.channel.messages.fetch(
@@ -31,6 +33,7 @@ async function trackMemberBehavior(message) {
         );
         if (repliedMsg && repliedMsg.author.id !== authorId) {
           const target = repliedMsg.author;
+
           if (target.bot && target.id !== message.client.user.id) {
             const botEntry = profile.externalBotsUsed.find(
               (b) => b.botId === target.id,
@@ -63,6 +66,7 @@ async function trackMemberBehavior(message) {
       } catch (err) {}
     }
 
+    // Track command triggers in this guild
     if (
       message.content.startsWith("/") ||
       message.content.startsWith("!") ||
@@ -82,6 +86,7 @@ async function trackMemberBehavior(message) {
     await profile.save();
     return profile;
   } catch (err) {
+    if (err.code === 11000) return null; // Safe guard for simultaneous race events
     console.error("[TELEMETRY ERROR]:", err.message);
     return null;
   }
@@ -168,7 +173,7 @@ async function generateRefinedAiResponse(message, query) {
   }
 
   const systemPersona = [
-    'You are "ATX AI", the witty, authentic, and grounded digital companion of the "ATX Family" gaming server.',
+    'You are "ATX AI" also known as "Starza (Your female version)", the witty, authentic, and grounded digital companion of the "ATX Family" server.',
     "",
     `MEMBER PROFILE (@${message.author.username}):`,
     `- Social Circle: ${companionContext}`,
@@ -177,17 +182,17 @@ async function generateRefinedAiResponse(message, query) {
     "STRICT BOUNDARY ON LIVE DATA (NO WEB ACCESS):",
     "- You DO NOT have access to live internet browsing or real-time feeds.",
     "- If asked about live sports scores, current weather outside, today's news headlines, or live stock/crypto prices: Do NOT guess or hallucinate.",
-    "- Immediately give a brief, playful refusal in 1 sentence (e.g., 'I run on server banter, not satellite weather radar—check your phone window!' or 'I'm locked inside the Discord matrix with zero live score feeds, check Google for the match!').",
+    "- Immediately give a brief, playful refusal in 1 sentence (e.g., 'I run on server banter, not satellite weather radar—check your phone window!' or 'I'm locked inside the Discord with zero live score feeds, check Google for the match!').",
     "",
     "EMOJI USAGE RULES:",
     `- ${emojiData.promptText || "Use standard Discord emojis"}`,
-    "- Strict limit: Use AT MOST 1 or 2 emojis across your entire answer.",
-    "- Place emojis naturally at the end of thoughts.",
+    "- Strict limit: Use AT MOST 4 or 5 animated emojis across your entire answer.",
+    "- Place emojis naturally between sentences and punctuation and at the end of thoughts also use some love/cute emoji after addressing user/member.",
     "",
     "CONVERSATION DIRECTIVES:",
     "1. Speak in clean, natural, conversational English.",
     "2. Friendly, sharp, and witty — avoid corporate assistant clichés.",
-    "3. Keep everyday replies concise (1-3 sentences). Jump straight into the point.",
+    "3. Keep everyday replies concise (1-3 sentences). Jump straight into the point. If someone ask to explain something give them explanation in around 2 paragraphs of 4-5 sentences.",
   ].join("\n");
 
   const fullPrompt = [

@@ -24,7 +24,7 @@ async function handleUtilityCommands({
     const prompt = textInput || args.join(" ").trim();
     if (!prompt) {
       return reply(
-        "<:helpAssist:1571833290879402004> Need assistance? Provide a prompt or explore `/help`!",
+        "### Need assistance? <:cutie:1571805401194823730>\nAsk anything or explore **/help**!",
       );
     }
 
@@ -45,7 +45,7 @@ async function handleUtilityCommands({
     const response = await generateRefinedAiResponse(contextMessage, prompt);
     const final =
       response ||
-      "<:auraloss:1571805296769110056> **Sollyyy...** AI is momentarily offline. Please re-engage shortly!\n<:closed1left:1571861006043316254><:closed2right:1571861003610624072>";
+      "**OOPS...** <:closed1left:1571861006043316254><:closed2right:1571861003610624072> Try again after **15** seconds!";
 
     await DiscordUser.updateOne(
       { discordId: author.id },
@@ -84,7 +84,7 @@ async function handleUtilityCommands({
       const transcript = recentMessages.join("\n").slice(0, 4000);
       const debrief = await callAiWithFallback(
         [
-          `You are ATX Bot, the official resident bot and caretaker of the ATX Plato server.`,
+          `You are ATX Bot (your other name is "Starza" the female version), the official resident bot and caretaker of the ATX server.`,
           `Summarize the chat activity from the past ${hours} hours into a crisp, engaging server debrief.`,
           ``,
           `Include these exact sections:`,
@@ -104,7 +104,7 @@ async function handleUtilityCommands({
 
       if (!debrief) {
         return reply(
-          "<:auraloss:1571805296769110056> **Sollyyy...** Could not compile server summary at this moment. Please try again shortly!",
+          "<:auraloss:1571805296769110056> **Sorryyy...** Could not compile server summary at this moment. Please try again shortly!",
         );
       }
 
@@ -123,7 +123,7 @@ async function handleUtilityCommands({
     } catch (err) {
       console.error("[SUMMARISE ERROR]", err);
       return reply(
-        "<:auraloss:1571805296769110056> **Sollyyy...** Encountered an internal error while fetching channel history!",
+        "<:auraloss:1571805296769110056> **Sorryyy...** Encountered an internal error while fetching channel history!",
       );
     }
   }
@@ -141,7 +141,7 @@ async function handleUtilityCommands({
       instruction =
         "Verify this claim. Label it TRUE, FALSE, or MISLEADING with a brief reason:";
     if (commandName === "translate")
-      instruction = "Translate the following text into both English and Hindi:";
+      instruction = "Translate the following text into English:";
 
     const res = await callAiWithFallback(`${instruction}\n\n${query}`);
     const embed = new EmbedBuilder()
@@ -191,7 +191,7 @@ async function handleUtilityCommands({
       .setDescription(
         [
           `### <a:announcement2:1571861016306782298> Opposing Statement`,
-          `> *" ${stmt.length > 250 ? stmt.slice(0, 247) + "..." : stmt} "*`,
+          `> *${stmt.length > 250 ? stmt.slice(0, 247) + "..." : stmt}*`,
           ``,
           `### <:booksPilesReading:1571805371146965062> Debunk & Refutation`,
           `> ${rebuttalText}`,
@@ -262,7 +262,7 @@ async function handleUtilityCommands({
             `> **"${reminderText}"**`,
           ].join("\n"),
         )
-        .setFooter({ text: "Type !help for more commands" });
+        .setFooter({ text: "Use !help for more commands" });
 
       await channel
         .send({ content: `${author}`, embeds: [alarmEmbed] })
