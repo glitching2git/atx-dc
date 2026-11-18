@@ -79,13 +79,32 @@ async function executeCommand(ctx) {
 
   // 0. Handle /connectweb command
   // Inside executeCommand in bot.js:
+  const ATX_GUILD_ID = "1330548041974812722";
+  const ATX_INVITE_URL = "https://discord.gg/pjzdHKS6Jj"; // or your server invite link
+
   if (ctx.commandName === "connectweb") {
-    const code = (ctx.textInput || "").trim();
+    // 1. Enforce Server Restriction
+    if (ctx.guild?.id !== ATX_GUILD_ID) {
+      return ctx.reply({
+        content: [
+          `### <:auraloss:1571805296769110056> Server Mismatch Detected`,
+          `> Web synchronization is strictly restricted to the official **ATX Family Discord Server**.`,
+          ``,
+          `Join the server to link your profile and sync your EP:`,
+          `👉 [**Join ATX Family Discord**](${ATX_INVITE_URL})`,
+          ``,
+          `-# Once inside ATX Family, execute \`/connectweb code:<6-digits>\` in any chat channel.`,
+        ].join("\n"),
+        ephemeral: true,
+      });
+    }
+
+    const code = (ctx.textInput || ctx.args?.[0] || "").trim();
 
     if (!code || code.length !== 6) {
       return ctx.reply({
         content:
-          "### <:shutupSilentZipped:1571805467670347796> Invalid Verification Code\n> Please provide the **6-digit verification code** generated from your [ATX Web Profile](https://atx-family.onrender.com).\n-# Syntax: `/connectweb code:749201`",
+          "### <:shutupSilentZipped:1571805467670347796> Invalid Verification Code\n> Provide the 6-digit code from your [ATX Website Profile](https://atx-family.onrender.com/profile).\n-# Example: `/connectweb code:749201`",
         ephemeral: true,
       });
     }
@@ -93,7 +112,7 @@ async function executeCommand(ctx) {
     try {
       const now = new Date();
 
-      // 1. Verify token & expiration
+      // 2. Locate website user with active, unexpired code
       const webUser = await User.findOne({
         connectionCode: code,
         codeExpiresAt: { $gt: now },
@@ -102,66 +121,65 @@ async function executeCommand(ctx) {
       if (!webUser) {
         return ctx.reply({
           content:
-            "### <:auraloss:1571805296769110056> Code Expired or Unrecognized\n> The code has expired or was already redeemed. Refresh your profile page to generate a fresh token and try again.\n-# Tokens are single-use and expire within 5 minutes.",
+            "### <:auraloss:1571805296769110056> Code Expired or Unrecognized\n> Refresh your [Website Profile](https://atx-family.onrender.com/profile) to generate a fresh 6-digit token and try again.\n-# Verification tokens expire in 5 minutes.",
           ephemeral: true,
         });
       }
 
-      // 2. Link discordId & invalidate code
+      // 3. Link discordId to Web User document
       webUser.discordId = ctx.author.id;
       webUser.connectionCode = null;
       webUser.codeExpiresAt = null;
       await webUser.save();
 
-      // 3. Sync Web Vault XP -> Discord Bot Balance
-      const webPoints = webUser.xpBalance || 0;
-
-      const updatedDcUser = await DiscordUser.findOneAndUpdate(
+      // 4. Consolidate DiscordUser balance (Single Source of Truth)
+      const dcUser = await DiscordUser.findOneAndUpdate(
         { discordId: ctx.author.id },
         {
-          $inc: { botBalance: webPoints },
-          $setOnInsert: { username: ctx.author.username },
+          $setOnInsert: {
+            username: ctx.author.username,
+            tag: ctx.author.tag || ctx.author.username,
+          },
+          $set: { "chatStats.lastActiveAt": new Date() },
         },
-        { upsert: true, returnDocument: "after" },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
-      // 4. Clean Embed Display
-      const { EmbedBuilder } = require("discord.js");
+      // 5. Link Guild-Scoped UserProfile as well
+      await UserProfile.findOneAndUpdate(
+        { userId: ctx.author.id, guildId: ATX_GUILD_ID },
+        {
+          $setOnInsert: { userId: ctx.author.id, guildId: ATX_GUILD_ID },
+          $set: {
+            webUser: webUser._id,
+            username: ctx.author.username,
+          },
+        },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
+      );
 
-      const successEmbed = new EmbedBuilder()
-        .setColor(0x00f3ff)
-        .setAuthor({
-          name: "ATX IDENTITY SYNCHRONIZATION",
-          iconURL: ctx.client.user?.displayAvatarURL(),
-        })
-        .setThumbnail(ctx.author.displayAvatarURL({ dynamic: true, size: 256 }))
-        .setDescription(
-          [
-            `### <a:sparklesstars:1571929733770383521> Accounts Successfully Linked! <a:approvedCorrect:1572188241245900890>`,
-            `Your Discord identity is now bridged with the official ATX Web Database.`,
-            ``,
-            `─────────────────────────────`,
-            `> <:maincharacter:1571805299126575184> **Website Callsign:** \` ${webUser.username} \``,
-            `> 👤 **Discord Member:** ${ctx.author} (\`${ctx.author.username}\`)`,
-            `> <a:diamondgem:1571920814041858149> **Vault Transfer:** \`+${webPoints.toLocaleString()} EP\``,
-            `─────────────────────────────`,
-            ``,
-            `### <a:moneybagcoin:1571920822694715492> Unified EP Balance: **\` ${(updatedDcUser.botBalance || 0).toLocaleString()} EP \`**`,
-            ``,
-            `-# <a:lightningAuraBolt:1572172753602224168> Access live tournaments & high-roller perks on [atx-family.onrender.com](https://atx-family.onrender.com)`,
-          ].join("\n"),
-        )
-        .setFooter({
-          text: `Account ID: ${webUser._id.toString().slice(-6).toUpperCase()} • ATX Ecosystem`,
-          iconURL: ctx.client.user?.displayAvatarURL(),
-        });
+      const totalBotEp = dcUser?.botBalance || 0;
+      const webVaultXp = webUser?.xpBalance || 0;
 
-      return ctx.reply({ embeds: [successEmbed] });
+      return ctx.reply({
+        content: [
+          `### <a:sparklesstars:1571929733770383521> Connected Successfully! <a:approvedCorrect:1572188241245900890>`,
+          `─────────────────────────────`,
+          `> **<a:flameflicker:1571805360145047622> ${webUser.username} <a:flameflicker:1571805360145047622> ${ctx.author} <a:flameflicker:1571805360145047622>**`,
+          `> <a:verifiedBadgeApproved:1571805350925967360> **ATX Family**`,
+          `─────────────────────────────`,
+          `### <a:diamondgem:1571920814041858149> **EP Collection**`,
+          `> <:coingold:1571936733455720518> • **Discord Bal:** ${totalBotEp.toLocaleString()} EP`,
+          `> <:coingold:1571936733455720518> • **Website Bal:** ${webVaultXp.toLocaleString()} EP`,
+          `> <a:moneybagcoin:1571920822694715492> • **Combined Bal: ${(totalBotEp + webVaultXp).toLocaleString()} EP`,
+          ``,
+        ].join("\n"),
+      });
     } catch (err) {
       console.error("[CONNECT WEB ERROR]:", err);
       return ctx.reply({
         content:
-          "### <:deadSkull:1571908653966041308> Internal Vault Sync Failure\n> Encountered a database timeout while bridging accounts. Please retry in a few moments.",
+          "### <:deadSkull:1571908653966041308> Database connection failed. Please retry shortly.",
         ephemeral: true,
       });
     }
