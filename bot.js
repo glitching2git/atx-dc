@@ -9,13 +9,15 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-// Services & Config
+// Services & Models
 const {
   connectDB,
   getOrCreateDiscordUser,
   DiscordUser,
   logActivity,
 } = require("./services/database");
+const User = require("./models/User"); // Path to User model
+const UserProfile = require("./models/UserProfile"); // Path to UserProfile model
 const { loadAppEmojis, EMOJIS } = require("./config/emojis");
 const { registerNitroMimic } = require("./nitro-mimic");
 const {
@@ -23,7 +25,7 @@ const {
   generateRefinedAiResponse,
 } = require("./services/conversationEngine");
 
-// Modular Command Handlers
+// Modular Handlers
 const {
   activeGames,
   launchNextRound,
@@ -40,7 +42,7 @@ process.on("uncaughtException", (error) =>
   console.error("[Process Guard] Uncaught Exception:", error),
 );
 
-// Render Keep-Alive Server
+// Keep-Alive Server
 const PORT = process.env.PORT || 3000;
 http
   .createServer((_, res) => {
@@ -57,7 +59,7 @@ http
     console.log(`[HTTP KEEP-ALIVE] Listening on port ${PORT}`),
   );
 
-// Connect Database
+// Connect DB
 connectDB();
 
 // Initialize Client
@@ -74,6 +76,79 @@ const client = new Client({
 // Central Command Dispatcher
 async function executeCommand(ctx) {
   await getOrCreateDiscordUser(ctx.author, ctx.member);
+
+  // 0. Handle /connectweb command
+  if (ctx.commandName === "connectweb") {
+    const code = (ctx.textInput || "").trim();
+
+    if (!code || code.length !== 6) {
+      return ctx.reply({
+        content:
+          "⚠️ **Invalid Code!** Please provide the 6-digit code shown on your ATX Website profile.\nExample: `/connectweb 749201`",
+        ephemeral: true,
+      });
+    }
+
+    try {
+      const now = new Date();
+
+      // Find user with valid, unexpired code
+      const webUser = await User.findOne({
+        connectionCode: code,
+        codeExpiresAt: { $gt: now },
+      });
+
+      if (!webUser) {
+        return ctx.reply({
+          content:
+            "❌ **Code Expired or Invalid!**\nGenerate a fresh code from your profile page and try again.",
+          ephemeral: true,
+        });
+      }
+
+      // Link accounts in Web DB
+      webUser.discordId = ctx.author.id;
+      webUser.connectionCode = null;
+      webUser.codeExpiresAt = null;
+      await webUser.save();
+
+      // Link accounts in Discord UserProfile DB
+      const discordProfile = await UserProfile.findOneAndUpdate(
+        { userId: ctx.author.id, guildId: ctx.guild.id },
+        {
+          $set: {
+            webUser: webUser._id,
+            username: ctx.author.username,
+          },
+        },
+        { upsert: true, returnDocument: "after" },
+      );
+
+      const webEp = webUser.xpBalance || 0;
+      const botEp = discordProfile.botBalance || 0;
+      const combined = webEp + botEp;
+
+      return ctx.reply({
+        content: [
+          `🔗 **Accounts Successfully Connected!**`,
+          `> **Website Callsign:** \`${webUser.username}\``,
+          `> **Discord Operator:** ${ctx.author}`,
+          ``,
+          `📊 **Synchronized EP Ledger:**`,
+          `• Website Vault: **${webEp.toLocaleString()} EP**`,
+          `• Discord Bot Rewards: **${botEp.toLocaleString()} EP**`,
+          `• Total Combined EP: **${combined.toLocaleString()} EP** ⚡`,
+        ].join("\n"),
+      });
+    } catch (err) {
+      console.error("[CONNECT WEB ERROR]:", err);
+      return ctx.reply({
+        content:
+          "⚠️ Database error processing account connection. Try again later.",
+        ephemeral: true,
+      });
+    }
+  }
 
   // 1. Mini-Game Launcher Commands
   const gameHandled = await handleGameCommands(ctx);
@@ -93,7 +168,7 @@ async function executeCommand(ctx) {
 
 // Client Lifecycle
 client.once(Events.ClientReady, async () => {
-  console.log(`[DISCORD] ATX Bot is live and connected as ${client.user.tag}`);
+  console.log(`[DISCORD] ATX Bot is live as ${client.user.tag}`);
   client.user.setActivity("ATX Discord Server ⚔️ 24/7", { type: 3 });
 
   await loadAppEmojis(client);
@@ -103,8 +178,6 @@ client.once(Events.ClientReady, async () => {
 // Slash Command Handler
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-
-  // Bypassed immediately so nitro-mimic.js manages deferral without collision
   if (interaction.commandName === "nitro") return;
 
   const isSecret = interaction.commandName === "secret";
@@ -119,6 +192,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const reminderOption = interaction.options.getString("reminder");
 
   const textInput =
+    interaction.options.getString("code") ||
     interaction.options.getString("prompt") ||
     interaction.options.getString("topic") ||
     interaction.options.getString("text") ||
@@ -161,17 +235,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
   });
 });
 
-// Message Handler (Telemetry, Mini-Games, and Targeted Conversational AI)
+// Message Handler
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
 
-  // Track social affinity and command usage in the background
   trackMemberBehavior(message).catch(() => {});
 
   const content = message.content.trim();
   const lower = content.toLowerCase();
 
-  // Active game guess checker with atomic lock
+  // Active game guess checker
   if (activeGames.has(message.channel.id)) {
     const currentGame = activeGames.get(message.channel.id);
     if (lower === "!stopgame") {
@@ -206,11 +279,18 @@ client.on(Events.MessageCreate, async (message) => {
       const gameType = currentGame.type;
       const displayAnswer = currentGame.answer;
 
+      // Update Discord User EP
       const updatedUser = await DiscordUser.findOneAndUpdate(
         { discordId: message.author.id },
         { $inc: { "gameStats.totalGamesPlayed": 1, botBalance: 50 } },
         { returnDocument: "after" },
       );
+
+      // Keep UserProfile synced as well
+      await UserProfile.findOneAndUpdate(
+        { userId: message.author.id },
+        { $inc: { botBalance: 50 } },
+      ).catch(() => {});
 
       await logActivity({
         author: message.author,
@@ -243,7 +323,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
-  // 1. Direct reply to one of the bot's messages
+  // Conversational response check
   let isReplyingToBot = false;
   if (message.reference && message.reference.messageId) {
     try {
@@ -256,14 +336,10 @@ client.on(Events.MessageCreate, async (message) => {
     } catch (e) {}
   }
 
-  // 2. Direct mention of the bot
   const botMentioned = message.mentions.has(client.user.id);
-
-  // 3. Name check (contains 'atx', 'atx ai', or 'starza')
   const containsBotName =
     /\b(ai atx|ai starza|starza ai|atx ai|atx|starza)\b/i.test(content);
 
-  // Conversational response check (Strict: No isContinuingChat)
   if (
     !content.startsWith("!") &&
     (botMentioned || isReplyingToBot || containsBotName)
@@ -294,7 +370,7 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
-  // Legacy Prefix Command Handler (!command)
+  // Prefix commands (!command)
   if (content.startsWith("!")) {
     const args = content.slice(1).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();

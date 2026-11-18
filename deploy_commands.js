@@ -257,12 +257,18 @@ const commands = [
         .setDescription("Select an emoji category (flirt, roast, aura, etc.)")
         .setAutocomplete(true)
         .setRequired(true),
-    )
+    ),
+
+  // 8. Connect web command
+  new SlashCommandBuilder()
+    .setName("connectweb")
+    .setDescription("Connect your Discord with your ATX Website account")
     .addStringOption((opt) =>
       opt
-        .setName("statement")
-        .setDescription("The message you want to send")
-        .setRequired(false),
+        .setName("code")
+        .setDescription("6-digit verification code from your website profile")
+        .setAutocomplete(true)
+        .setRequired(true),
     ),
 ].map((c) => c.toJSON());
 

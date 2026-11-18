@@ -1,13 +1,22 @@
-// models/UserProfile.js
 const mongoose = require("mongoose");
 
 const UserProfileSchema = new mongoose.Schema(
   {
-    userId: { type: String, required: true, index: true },
+    userId: { type: String, required: true, index: true }, // Discord User ID
     guildId: { type: String, required: true, index: true },
     username: { type: String, default: "" },
 
-    // Social telemetry: tracks companion affinity
+    // Mini-game EP balance on Discord
+    botBalance: { type: Number, default: 0 },
+
+    // Reference linking to the Web User collection
+    webUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     socialAffinity: [
       {
         targetUserId: { type: String, required: true },
@@ -16,14 +25,12 @@ const UserProfileSchema = new mongoose.Schema(
       },
     ],
 
-    // Commands usage telemetry
     commandTelemetry: {
       type: Map,
       of: Number,
       default: {},
     },
 
-    // Tracking external bot usage (e.g. Plato, OwO, Mudae, Karuta)
     externalBotsUsed: [
       {
         botName: { type: String, required: true },
@@ -33,13 +40,11 @@ const UserProfileSchema = new mongoose.Schema(
       },
     ],
 
-    // General interests and topics extracted over time
     interests: {
       type: [String],
       default: [],
     },
 
-    // Personality quirks (e.g., "playful banter", "competitive", "brief replies")
     vibeProfile: {
       type: String,
       default: "Neutral server regular",
