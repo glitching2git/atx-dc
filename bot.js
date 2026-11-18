@@ -171,7 +171,7 @@ async function executeCommand(ctx) {
           `### <a:diamondgem:1571920814041858149> **EP Collection**`,
           `> <:coingold:1571936733455720518> • **Discord Bal:** ${totalBotEp.toLocaleString()} EP`,
           `> <:coingold:1571936733455720518> • **Website Bal:** ${webVaultXp.toLocaleString()} EP`,
-          `> <a:moneybagcoin:1571920822694715492> • **Combined Bal: ${(totalBotEp + webVaultXp).toLocaleString()} EP`,
+          `> <a:moneybagcoin:1571920822694715492> • **Combined Bal: ${(totalBotEp + webVaultXp).toLocaleString()} EP**`,
           ``,
         ].join("\n"),
       });
